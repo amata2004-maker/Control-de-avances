@@ -1,0 +1,2761 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioTipo — Diagnóstico por IA</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f7fc;
+    --surface: #ffffff;
+    --surface2: #eef3fa;
+    --border: rgba(30,58,110,0.12);
+    --text: #16243d;
+    --muted: rgba(50,75,115,0.62);
+    --accent: #162544; --accent-deep:#0f1a30; --accent2:#C59A3D;
+    --sang: #c0392b; --sang-soft: rgba(192,57,43,0.10);
+    --col: #d4853a;  --col-soft: rgba(212,133,58,0.10);
+    --mel: #2563eb;  --mel-soft: rgba(37,99,235,0.10);
+    --flem: #1ca672; --flem-soft: rgba(28,166,114,0.10);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:var(--bg); color:var(--text);
+    font-family:'DM Sans',sans-serif; font-weight:300;
+    min-height:100vh; overflow-x:hidden;
+  }
+  body::before {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 10%, rgba(200,169,110,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 50% at 80% 80%, rgba(124,158,143,0.05) 0%, transparent 60%);
+  }
+
+  .screen { display:none; min-height:100vh; position:relative; z-index:1; }
+  .screen.active { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 20px; }
+
+  /* ── INTRO ── */
+  .intro-badge {
+    font-size:10px; letter-spacing:0.25em; text-transform:uppercase;
+    color:var(--accent); border:1px solid rgba(200,169,110,0.3);
+    padding:6px 16px; border-radius:20px; margin-bottom:28px;
+    animation:fadeUp 0.7s ease both;
+  }
+  .intro-title {
+    font-family:'Cormorant Garamond',serif;
+    font-size:clamp(60px,12vw,100px); font-weight:300;
+    line-height:0.93; letter-spacing:-0.02em; text-align:center;
+    animation:fadeUp 0.7s 0.1s ease both;
+  }
+  .intro-title em { font-style:italic; color:var(--accent); }
+  .intro-sub {
+    font-size:14px; color:var(--muted); max-width:380px;
+    line-height:1.75; margin:20px auto 40px; text-align:center;
+    animation:fadeUp 0.7s 0.2s ease both;
+  }
+  .steps-row {
+    display:flex; gap:10px; margin-bottom:40px; flex-wrap:wrap; justify-content:center;
+    animation:fadeUp 0.7s 0.3s ease both;
+  }
+  .step-chip {
+    display:flex; align-items:center; gap:8px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:10px 14px; font-size:12px; color:var(--muted);
+  }
+  .step-chip-num {
+    width:20px; height:20px; border-radius:50%; background:rgba(200,169,110,0.15);
+    color:var(--accent); font-size:10px; font-weight:600;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .btn-primary {
+    display:inline-flex; align-items:center; gap:10px;
+    background:var(--accent); color:#ffffff; border:none; cursor:pointer;
+    font-family:'DM Sans',sans-serif; font-size:14px; font-weight:500;
+    letter-spacing:0.05em; padding:16px 36px; border-radius:50px;
+    transition:all 0.25s; animation:fadeUp 0.7s 0.4s ease both;
+  }
+  .btn-primary:hover { background:#1e40af; transform:translateY(-2px); box-shadow:0 12px 40px rgba(29,78,216,.28); }
+
+  /* ── CAMERA SCREEN ── */
+  .cam-header { text-align:center; margin-bottom:24px; width:100%; max-width:480px; }
+  .step-label { font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:var(--accent); margin-bottom:10px; }
+  .cam-title { font-family:'Cormorant Garamond',serif; font-size:clamp(28px,5vw,40px); font-weight:300; line-height:1.1; }
+  .cam-desc { font-size:13px; color:var(--muted); margin-top:8px; line-height:1.6; max-width:340px; margin-left:auto; margin-right:auto; }
+
+  .cam-box {
+    width:100%; max-width:400px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:20px; overflow:hidden; position:relative;
+  }
+
+  .cam-preview {
+    width:100%; aspect-ratio:3/4;
+    background:#000; position:relative; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  video, #hand-canvas {
+    width:100%; height:100%; object-fit:cover; position:absolute; inset:0;
+  }
+
+  #hand-canvas { display:none; }
+
+  .cam-overlay {
+    position:absolute; inset:0; pointer-events:none; z-index:2;
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  .cam-guide {
+    width:70%; height:85%;
+    border:2px dashed rgba(200,169,110,0.5);
+    border-radius:16px;
+    box-shadow: inset 0 0 40px rgba(200,169,110,0.05);
+    animation: guidePulse 2s ease infinite;
+  }
+
+  .cam-guide-label {
+    position:absolute; bottom:16px; left:50%; transform:translateX(-50%);
+    font-size:11px; color:rgba(200,169,110,0.8); white-space:nowrap;
+    background:rgba(0,0,0,0.5); padding:4px 12px; border-radius:20px;
+    backdrop-filter:blur(4px);
+  }
+
+  .cam-placeholder {
+    display:flex; flex-direction:column; align-items:center; gap:12px;
+    color:var(--muted); z-index:1;
+  }
+  .cam-placeholder-icon { font-size:48px; opacity:0.4; }
+  .cam-placeholder-text { font-size:12px; text-align:center; max-width:180px; line-height:1.5; }
+
+  .cam-controls {
+    padding:20px; display:flex; flex-direction:column; gap:12px;
+  }
+
+  .btn-cam {
+    width:100%; padding:14px; border-radius:12px; border:none; cursor:pointer;
+    font-family:'DM Sans',sans-serif; font-size:14px; font-weight:500;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    transition:all 0.2s;
+  }
+
+  .btn-cam-start { background:var(--accent); color:#fff; }
+  .btn-cam-start:hover { background:#1e40af; }
+
+  .btn-cam-capture { background:var(--accent); color:#fff; display:none; }
+  .btn-cam-capture:hover { background:#1e40af; }
+
+  .btn-cam-upload {
+    background:var(--surface2); color:var(--text);
+    border:1px solid var(--border);
+  }
+  .btn-cam-upload:hover { border-color:rgba(200,169,110,0.4); }
+
+  .btn-cam-retake {
+    background:var(--surface2); color:var(--muted);
+    border:1px solid var(--border); display:none; font-size:13px;
+  }
+
+  #file-input { display:none; }
+
+  .img-preview-wrap {
+    width:100%; aspect-ratio:3/4; position:relative; display:none;
+    background:#000; overflow:hidden;
+  }
+  #img-preview {
+    width:100%; height:100%; object-fit:cover;
+  }
+
+  .analyzing-overlay {
+    position:absolute; inset:0; background:rgba(10,10,15,0.85);
+    display:none; align-items:center; justify-content:center;
+    flex-direction:column; gap:16px; z-index:10;
+    backdrop-filter:blur(4px);
+  }
+  .analyzing-overlay.active { display:flex; }
+
+  .scan-line {
+    position:absolute; top:0; left:0; right:0; height:3px;
+    background:linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation:scanDown 1.8s ease infinite;
+  }
+
+  .analyzing-text { font-size:14px; color:var(--accent); font-weight:500; }
+  .analyzing-sub { font-size:12px; color:var(--muted); }
+
+  /* ── QUESTIONS ── */
+  .progress-wrap { width:100%; max-width:480px; margin-bottom:28px; }
+  .progress-info { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-bottom:8px; }
+  .progress-track { height:3px; background:var(--surface2); border-radius:2px; overflow:hidden; }
+  .progress-fill { height:100%; background:var(--accent); border-radius:2px; transition:width 0.4s; }
+
+  .q-card {
+    width:100%; max-width:480px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:20px; padding:28px;
+    animation:fadeUp 0.4s ease both;
+  }
+  .q-text {
+    font-family:'Cormorant Garamond',serif; font-size:21px;
+    font-weight:400; line-height:1.4; margin-bottom:24px;
+  }
+  .q-opts { display:flex; flex-direction:column; gap:9px; }
+  .q-opt {
+    padding:14px 16px; background:var(--surface2); border:1px solid var(--border);
+    border-radius:12px; cursor:pointer; transition:all 0.2s;
+    font-size:13px; line-height:1.5; color:var(--text);
+    text-align:left; font-family:'DM Sans',sans-serif;
+    display:flex; align-items:flex-start; gap:10px;
+  }
+  .q-opt:hover { border-color:rgba(200,169,110,0.4); transform:translateX(4px); }
+  .q-opt.sel { border-color:var(--accent); background:rgba(200,169,110,0.08); }
+  .q-letter {
+    flex:0 0 20px; height:20px; border-radius:50%;
+    background:var(--surface); border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    font-size:10px; font-weight:500; color:var(--muted); margin-top:1px;
+  }
+  .q-opt.sel .q-letter { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+  /* ── PROCESSING ── */
+  .proc-orb {
+    width:110px; height:110px; border-radius:50%;
+    background:conic-gradient(var(--accent), var(--flem), var(--mel), var(--sang), var(--accent));
+    margin:0 auto 28px; animation:spin 2s linear infinite; position:relative;
+  }
+  .proc-orb::after { content:''; position:absolute; inset:8px; background:var(--bg); border-radius:50%; }
+  .proc-title { font-family:'Cormorant Garamond',serif; font-size:30px; font-weight:300; margin-bottom:8px; text-align:center; }
+  .proc-steps { display:flex; flex-direction:column; gap:8px; margin-top:28px; max-width:260px; }
+  .proc-step {
+    font-size:12px; color:var(--muted); display:flex; align-items:center; gap:10px;
+    opacity:0; animation:fadeUp 0.5s ease forwards;
+  }
+  .proc-step:nth-child(1){animation-delay:0.3s;}
+  .proc-step:nth-child(2){animation-delay:1s;}
+  .proc-step:nth-child(3){animation-delay:1.7s;}
+  .proc-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex-shrink:0; }
+
+  /* ── RESULTS ── */
+  .res-hero { text-align:center; margin-bottom:32px; width:100%; max-width:600px; }
+  .res-badge { font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:var(--accent); margin-bottom:14px; display:block; }
+  .res-name { font-family:'Cormorant Garamond',serif; font-size:clamp(50px,10vw,84px); font-weight:300; line-height:0.95; letter-spacing:-0.02em; }
+  .res-tagline { font-family:'Cormorant Garamond',serif; font-style:italic; font-size:17px; color:var(--muted); margin-top:10px; }
+
+  /* Hand analysis card */
+  .hand-analysis-card {
+    width:100%; max-width:600px;
+    background:var(--surface); border:1px solid rgba(200,169,110,0.2);
+    border-radius:16px; padding:20px; margin-bottom:12px;
+  }
+  .ha-label { font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:var(--accent); margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+  .ha-label::after { content:''; flex:1; height:1px; background:var(--border); }
+  .ha-text { font-size:13px; color:var(--muted); line-height:1.7; font-style:italic; }
+
+  .res-meter { display:flex; gap:6px; justify-content:center; margin-top:20px; flex-wrap:wrap; }
+  .m-item { flex:1; min-width:70px; max-width:110px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px 8px; text-align:center; }
+  .m-name { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:7px; }
+  .m-bar { height:4px; background:var(--surface2); border-radius:2px; overflow:hidden; margin-bottom:5px; }
+  .m-fill { height:100%; border-radius:2px; transition:width 1s 0.5s ease; }
+  .m-pct { font-size:12px; font-weight:500; }
+
+  .res-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; width:100%; max-width:600px; margin-bottom:10px; }
+  .res-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:18px; }
+  .res-card.full { grid-column:1/-1; }
+  .card-lbl { font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:var(--accent); margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+  .card-lbl::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  .tag-list { display:flex; flex-wrap:wrap; gap:6px; }
+  .tag { padding:5px 12px; border-radius:20px; font-size:11px; font-weight:500; }
+  .comm-item { padding:9px 0; border-bottom:1px solid var(--border); font-size:12px; line-height:1.6; color:var(--muted); }
+  .comm-item:last-child { border-bottom:none; }
+  .comm-item strong { display:block; color:var(--text); font-size:13px; margin-bottom:2px; }
+
+  .lock-wrap { position:relative; }
+  .lock-blur { filter:blur(4px); pointer-events:none; user-select:none; opacity:0.4; }
+  .lock-badge {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    background:var(--surface); border:1px solid var(--accent); border-radius:12px;
+    padding:14px 18px; text-align:center; width:190px; z-index:10;
+  }
+  .lock-icon { font-size:22px; margin-bottom:6px; }
+  .lock-text { font-size:11px; color:var(--muted); margin-bottom:10px; line-height:1.5; }
+  .btn-unlock {
+    background:var(--accent); color:#fff; border:none; border-radius:20px;
+    padding:8px 16px; font-size:11px; font-weight:500; cursor:pointer;
+    font-family:'DM Sans',sans-serif; width:100%; transition:all 0.2s;
+  }
+  .btn-unlock:hover { background:#1e40af; }
+
+  .share-card {
+    width:100%; max-width:600px;
+    background:linear-gradient(135deg,var(--surface),var(--surface2));
+    border:1px solid var(--border); border-radius:16px; padding:22px; text-align:center;
+  }
+  .share-title { font-family:'Cormorant Garamond',serif; font-size:20px; margin-bottom:6px; }
+  .share-desc { font-size:12px; color:var(--muted); margin-bottom:18px; }
+  .share-btns { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .btn-shr {
+    padding:10px 18px; border-radius:8px; font-size:12px; font-weight:500;
+    border:none; cursor:pointer; font-family:'DM Sans',sans-serif;
+    transition:all 0.2s; display:flex; align-items:center; gap:6px;
+  }
+  .btn-shr:hover { transform:translateY(-2px); opacity:0.9; }
+  .s-ig { background:#E1306C; color:#fff; }
+  .s-wa { background:#25D366; color:#fff; }
+  .s-cp { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+
+  /* NAV */
+  .nav-row { display:flex; gap:10px; width:100%; max-width:480px; margin-top:16px; }
+  .btn-back { padding:14px 20px; background:transparent; border:1px solid var(--border); border-radius:50px; color:var(--muted); font-family:'DM Sans',sans-serif; font-size:13px; cursor:pointer; transition:all 0.2s; }
+  .btn-back:hover { border-color:rgba(255,255,255,0.2); color:var(--text); }
+  .btn-next { flex:1; padding:14px 24px; background:var(--accent); border:none; border-radius:50px; color:#fff; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:500; cursor:pointer; transition:all 0.2s; }
+  .btn-next:hover { background:#1e40af; transform:translateY(-1px); }
+  .btn-next:disabled { opacity:0.3; cursor:not-allowed; transform:none; }
+
+  /* ERROR */
+  .error-msg { background:rgba(232,99,74,0.1); border:1px solid rgba(232,99,74,0.3); border-radius:10px; padding:12px 16px; font-size:12px; color:#e8634a; margin-top:10px; display:none; line-height:1.5; }
+
+  @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  @keyframes guidePulse { 0%,100%{opacity:0.5} 50%{opacity:1} }
+  @keyframes scanDown { 0%{top:0;opacity:1} 100%{top:100%;opacity:0} }
+
+  @media(max-width:480px) {
+    .res-grid { grid-template-columns:1fr; }
+    .res-card.full { grid-column:1; }
+  }
+
+  /* ═══ PRICING SCREEN ═══ */
+  #s-pricing { padding:40px 20px 80px; }
+  .pricing-header { text-align:center; margin-bottom:36px; width:100%; max-width:640px; }
+  .pricing-eyebrow { font-size:10px; letter-spacing:.25em; text-transform:uppercase; color:var(--accent); margin-bottom:14px; }
+  .pricing-title { font-family:'Cormorant Garamond',serif; font-size:clamp(34px,6vw,54px); font-weight:300; line-height:1.05; }
+  .pricing-title em { font-style:italic; color:var(--accent); }
+  .pricing-sub { font-size:13px; color:var(--muted); margin-top:12px; line-height:1.7; max-width:420px; margin-left:auto; margin-right:auto; }
+  .early-bird { width:100%; max-width:640px; background:linear-gradient(135deg,rgba(37,99,235,.08),rgba(37,99,235,.02)); border:1px solid rgba(37,99,235,.25); border-radius:14px; padding:14px 20px; display:flex; align-items:center; gap:14px; margin-bottom:24px; flex-wrap:wrap; }
+  .eb-icon { font-size:24px; flex-shrink:0; }
+  .eb-text { font-size:12px; line-height:1.6; flex:1; }
+  .eb-text strong { color:var(--accent); display:block; font-size:13px; margin-bottom:2px; }
+  .eb-pill { background:var(--accent2); color:#fff; font-size:10px; font-weight:700; padding:5px 12px; border-radius:20px; white-space:nowrap; flex-shrink:0; letter-spacing:.05em; }
+  .plans-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; width:100%; max-width:640px; margin-bottom:28px; }
+  .plan-card { background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:24px 16px; display:flex; flex-direction:column; transition:transform .2s,border-color .2s; position:relative; overflow:hidden; }
+  .plan-card:hover { transform:translateY(-4px); }
+  .plan-card.featured { border-color:var(--accent2); background:linear-gradient(160deg,rgba(200,169,110,.07),var(--surface)); }
+  .plan-card.featured::before { content:'MÁS POPULAR'; position:absolute; top:0; right:0; background:var(--accent2); color:#000; font-size:9px; font-weight:700; letter-spacing:.1em; padding:5px 12px; border-radius:0 18px 0 10px; }
+  .plan-name { font-size:10px; text-transform:uppercase; letter-spacing:.15em; color:var(--muted); margin-bottom:10px; }
+  .plan-price { font-family:'Cormorant Garamond',serif; font-size:40px; font-weight:300; line-height:1; color:var(--text); margin-bottom:2px; }
+  .plan-price span { font-size:13px; font-weight:400; color:var(--muted); }
+  .plan-period { font-size:11px; color:var(--muted); margin-bottom:16px; }
+  .plan-divider { height:1px; background:var(--border); margin-bottom:14px; }
+  .plan-features { display:flex; flex-direction:column; gap:7px; margin-bottom:18px; flex:1; }
+  .plan-feat { font-size:11px; color:var(--muted); display:flex; align-items:flex-start; gap:7px; line-height:1.5; }
+  .plan-feat-icon { flex-shrink:0; margin-top:1px; }
+  .plan-feat.hl { color:var(--text); }
+  .btn-plan { width:100%; padding:12px; border-radius:10px; border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:12px; font-weight:500; transition:all .2s; }
+  .btn-plan-free { background:var(--surface2); color:var(--muted); border:1px solid var(--border); }
+  .btn-plan-free:hover { color:var(--text); }
+  .btn-plan-main { background:var(--accent); color:#fff; }
+  .btn-plan-main:hover { background:#1e40af; }
+  .btn-plan-pro { background:var(--surface2); color:var(--text); border:1px solid rgba(200,169,110,.3); }
+  .btn-plan-pro:hover { border-color:var(--accent2); }
+  .feat-table { width:100%; max-width:640px; background:var(--surface); border:1px solid var(--border); border-radius:18px; overflow:hidden; margin-bottom:16px; }
+  .ft-header { display:grid; grid-template-columns:1fr 70px 80px 70px; padding:12px 18px; border-bottom:1px solid var(--border); font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); }
+  .ft-header span:not(:first-child) { text-align:center; }
+  .ft-row { display:grid; grid-template-columns:1fr 70px 80px 70px; padding:11px 18px; border-bottom:1px solid var(--border); align-items:center; }
+  .ft-row:last-child { border-bottom:none; }
+  .ft-row:hover { background:rgba(255,255,255,.02); }
+  .ft-feat { font-size:12px; color:var(--muted); }
+  .ft-check { text-align:center; font-size:13px; }
+  .ft-section { background:rgba(200,169,110,.05); }
+  .ft-section .ft-feat { font-size:10px; text-transform:uppercase; letter-spacing:.15em; color:var(--accent); }
+  .guarantee { width:100%; max-width:640px; background:var(--surface); border:1px solid rgba(37,99,235,.18); border-radius:14px; padding:18px 22px; display:flex; align-items:center; gap:14px; margin-bottom:8px; }
+  .guarantee-icon { font-size:30px; flex-shrink:0; }
+  .guarantee-text { font-size:12px; color:var(--muted); line-height:1.6; }
+  .guarantee-text strong { display:block; color:var(--text); font-size:13px; margin-bottom:3px; }
+  @media(max-width:560px) { .plans-grid { grid-template-columns:1fr; } .ft-header,.ft-row { grid-template-columns:1fr 55px 70px 55px; padding:10px 12px; } }
+
+
+  /* ═══ PROFILE SELECTOR ═══ */
+  .profile-select { display:flex; flex-direction:column; gap:10px; max-width:440px; margin:0 auto; }
+  .profile-opt { display:flex; align-items:center; gap:14px; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 18px; cursor:pointer; transition:all .2s; text-align:left; }
+  .profile-opt:hover { border-color:rgba(37,99,235,.4); transform:translateY(-2px); }
+  .profile-opt.selected { border-color:var(--accent); background:linear-gradient(160deg,rgba(37,99,235,.05),var(--surface)); }
+  .profile-ic { font-size:26px; flex-shrink:0; }
+  .profile-txt { flex:1; }
+  .profile-txt strong { display:block; font-size:13px; color:var(--text); font-weight:600; margin-bottom:2px; }
+  .profile-txt span { font-size:11px; color:var(--muted); line-height:1.4; }
+  .profile-check { width:22px; height:22px; border-radius:50%; border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:11px; color:transparent; flex-shrink:0; transition:all .2s; }
+  .profile-opt.selected .profile-check { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+  /* ═══ TOOLS HUB ═══ */
+  .tools-hub { width:100%; max-width:600px; margin-top:8px; }
+  .tools-title { font-family:'Cormorant Garamond',serif; font-size:26px; font-weight:300; text-align:center; margin-bottom:4px; }
+  .tools-sub { font-size:12px; color:var(--muted); text-align:center; margin-bottom:20px; }
+  .tools-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .tool-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px; cursor:pointer; transition:all .2s; position:relative; overflow:hidden; box-shadow:0 2px 12px rgba(30,58,110,.04); }
+  .tool-card:hover { border-color:rgba(37,99,235,.4); transform:translateY(-2px); }
+  .tool-card.locked { opacity:.7; }
+  .tool-ic { font-size:22px; margin-bottom:8px; }
+  .tool-name { font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:3px; line-height:1.3; }
+  .tool-desc { font-size:10.5px; color:var(--muted); line-height:1.45; }
+  .tool-lock { position:absolute; top:10px; right:10px; font-size:12px; }
+  .tool-card.full { grid-column:1/-1; }
+
+  /* ═══ CHAT / COACH ═══ */
+  #s-coach, #s-analyze, #s-fulltool { padding:24px 18px 90px; align-items:center; }
+  .tool-header { width:100%; max-width:560px; display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+  .tool-back { background:var(--surface); border:1px solid var(--border); border-radius:50%; width:38px; height:38px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--muted); font-size:16px; flex-shrink:0; transition:all .2s; }
+  .tool-back:hover { color:var(--text); border-color:rgba(255,255,255,.2); }
+  .tool-h-txt strong { display:block; font-size:15px; color:var(--text); }
+  .tool-h-txt span { font-size:11px; color:var(--muted); }
+  .quota-pill { margin-left:auto; font-size:10px; color:var(--accent2); background:rgba(184,144,47,.08); border:1px solid rgba(184,144,47,.25); padding:5px 12px; border-radius:20px; white-space:nowrap; }
+
+  .chat-box { width:100%; max-width:560px; display:flex; flex-direction:column; gap:12px; margin-bottom:16px; }
+  .chat-msg { padding:14px 16px; border-radius:14px; font-size:13px; line-height:1.6; max-width:88%; }
+  .chat-msg.user { background:var(--accent); color:#fff; align-self:flex-end; border-bottom-right-radius:4px; }
+  .chat-msg.bot { background:var(--surface); border:1px solid var(--border); color:var(--text); align-self:flex-start; border-bottom-left-radius:4px; white-space:pre-wrap; }
+  .chat-msg.bot strong { color:var(--accent); }
+  .chat-typing { align-self:flex-start; color:var(--muted); font-size:12px; padding:10px 16px; font-style:italic; }
+
+  .chat-input-row { width:100%; max-width:560px; display:flex; gap:8px; position:fixed; bottom:0; left:50%; transform:translateX(-50%); background:var(--bg); padding:14px 18px; border-top:1px solid var(--border); z-index:50; }
+  .chat-input { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:24px; padding:13px 18px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:13px; resize:none; outline:none; max-height:100px; }
+  .chat-input:focus { border-color:rgba(74,127,193,.5); }
+  .chat-send { background:var(--accent); color:#fff; border:none; border-radius:50%; width:46px; height:46px; cursor:pointer; font-size:18px; flex-shrink:0; transition:all .2s; }
+  .chat-send:hover { background:#1e40af; }
+  .chat-send:disabled { opacity:.4; cursor:not-allowed; }
+
+  .chat-suggestions { width:100%; max-width:560px; display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+  .chat-sugg { background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:8px 14px; font-size:11px; color:var(--muted); cursor:pointer; transition:all .2s; }
+  .chat-sugg:hover { border-color:var(--accent2); color:var(--text); }
+
+  /* ═══ ANALYZE PERSON ═══ */
+  .analyze-form { width:100%; max-width:480px; }
+  .af-label { font-size:12px; color:var(--muted); margin-bottom:8px; display:block; }
+  .af-input { width:100%; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:14px; outline:none; margin-bottom:20px; }
+  .af-input:focus { border-color:rgba(74,127,193,.5); }
+  .af-q { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px; margin-bottom:12px; }
+  .af-q-text { font-size:13px; color:var(--text); margin-bottom:12px; font-weight:500; }
+  .af-opts { display:flex; flex-direction:column; gap:8px; }
+  .af-opt { padding:11px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; font-size:12px; color:var(--text); cursor:pointer; transition:all .2s; }
+  .af-opt:hover { border-color:rgba(37,99,235,.4); }
+  .af-opt.sel { border-color:var(--accent2); background:rgba(200,168,75,.08); }
+
+  /* ═══ FULL RESULT TOOL (8 dimensiones) ═══ */
+  .dim-card { width:100%; max-width:560px; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 18px; margin-bottom:10px; }
+  .dim-head { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .dim-ic { font-size:18px; }
+  .dim-name { font-size:13px; font-weight:600; color:var(--accent); }
+  .dim-text { font-size:12.5px; color:var(--muted); line-height:1.6; }
+
+
+  /* Profile expandable features */
+  .profile-wrap { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden; transition:border-color .2s; }
+  .profile-wrap:has(.profile-opt.selected) { border-color:var(--accent); box-shadow:0 4px 16px rgba(29,78,216,.10); }
+  .profile-select .profile-opt { background:transparent; border:none; border-radius:0; }
+  .profile-select .profile-opt:hover { transform:none; }
+  .profile-select .profile-wrap:hover { border-color:rgba(37,99,235,.4); transform:translateY(-2px); }
+  .profile-arrow { width:22px; height:22px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:16px; flex-shrink:0; transition:transform .3s; }
+  .profile-opt.selected .profile-arrow { transform:rotate(180deg); color:var(--accent); }
+  .profile-feats { max-height:0; overflow:hidden; transition:max-height .35s ease; }
+  .profile-feats.open { max-height:600px; }
+  .profile-feats-inner { padding:4px 18px 18px; }
+  .pf-item { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-top:1px solid var(--border); }
+  .pf-ic { font-size:15px; flex-shrink:0; margin-top:1px; }
+  .pf-txt strong { display:block; font-size:12px; color:var(--text); font-weight:600; }
+  .pf-txt span { font-size:10.5px; color:var(--muted); line-height:1.4; }
+
+
+  /* 4-plan layout */
+  .plans-grid.plans-4 { grid-template-columns:repeat(4,1fr); gap:10px; }
+  .plans-4 .plan-price { font-size:34px; }
+  .plans-4 .plan-card { padding:20px 13px; }
+  .ft-header.ft-4, .ft-row.ft-4 { grid-template-columns:1.4fr 60px 70px 75px 60px; }
+  @media(max-width:860px){
+    .plans-grid.plans-4 { grid-template-columns:1fr 1fr; }
+    .ft-header.ft-4, .ft-row.ft-4 { grid-template-columns:1.2fr 44px 54px 58px 48px; padding:10px 10px; font-size:8.5px; }
+    .ft-row.ft-4 .ft-feat { font-size:10px; }
+  }
+  @media(max-width:480px){
+    .plans-grid.plans-4 { grid-template-columns:1fr; }
+  }
+
+
+  /* ═══ AUTH ═══ */
+  #s-auth { align-items:center; justify-content:center; padding:32px 20px; }
+  .auth-card { width:100%; max-width:400px; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:32px 26px; box-shadow:0 8px 32px rgba(30,58,110,.06); }
+  .auth-logo { text-align:center; font-family:'Cormorant Garamond',serif; font-size:34px; font-weight:300; margin-bottom:4px; }
+  .auth-logo em { font-style:italic; color:var(--accent2); }
+  .auth-tab-row { display:flex; gap:6px; background:var(--surface2); border-radius:12px; padding:4px; margin:20px 0 22px; }
+  .auth-tab { flex:1; text-align:center; padding:10px; border-radius:9px; font-size:13px; font-weight:500; cursor:pointer; color:var(--muted); transition:all .2s; }
+  .auth-tab.active { background:var(--surface); color:var(--accent); box-shadow:0 1px 4px rgba(30,58,110,.08); }
+  .auth-field { margin-bottom:14px; }
+  .auth-field label { display:block; font-size:11px; color:var(--muted); margin-bottom:6px; }
+  .auth-field input { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:13px 14px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:14px; outline:none; }
+  .auth-field input:focus { border-color:rgba(37,99,235,.5); }
+  .auth-btn { width:100%; background:var(--accent); color:#fff; border:none; border-radius:10px; padding:14px; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:500; cursor:pointer; margin-top:6px; transition:all .2s; }
+  .auth-btn:hover { background:#1e40af; }
+  .auth-google { width:100%; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:13px; font-family:'DM Sans',sans-serif; font-size:13px; cursor:pointer; margin-top:10px; display:flex; align-items:center; justify-content:center; gap:8px; transition:all .2s; }
+  .auth-google:hover { border-color:rgba(37,99,235,.4); }
+  .auth-err { font-size:12px; color:var(--sang); margin-top:10px; text-align:center; display:none; }
+  .auth-skip { text-align:center; margin-top:18px; font-size:12px; color:var(--muted); cursor:pointer; text-decoration:underline; }
+  .auth-test { margin-top:18px; padding-top:16px; border-top:1px solid var(--border); }
+  .auth-test-title { font-size:10px; text-transform:uppercase; letter-spacing:.12em; color:var(--accent2); text-align:center; margin-bottom:10px; }
+  .test-user { display:flex; align-items:center; gap:10px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:9px 12px; margin-bottom:7px; cursor:pointer; transition:all .2s; }
+  .test-user:hover { border-color:rgba(37,99,235,.4); }
+  .test-user-ic { font-size:16px; }
+  .test-user-txt { flex:1; font-size:11px; }
+  .test-user-txt strong { display:block; color:var(--text); font-size:12px; }
+  .test-user-txt span { color:var(--muted); }
+  .test-user-plan { font-size:9px; font-weight:700; padding:3px 8px; border-radius:12px; }
+
+  /* Account chip on intro */
+  .account-bar { position:fixed; top:14px; right:16px; z-index:60; display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--border); border-radius:30px; padding:6px 8px 6px 14px; box-shadow:0 2px 12px rgba(30,58,110,.08); cursor:pointer; font-size:12px; }
+  .account-bar .ab-name { color:var(--text); font-weight:500; }
+  .account-bar .ab-plan { font-size:9px; font-weight:700; padding:3px 9px; border-radius:12px; }
+  .ab-avatar { width:26px; height:26px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; }
+
+  /* Account screen */
+  #s-account { align-items:center; padding:32px 20px; }
+  .acc-card { width:100%; max-width:440px; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:26px; margin-bottom:14px; box-shadow:0 2px 12px rgba(30,58,110,.04); }
+  .acc-head { display:flex; align-items:center; gap:14px; margin-bottom:20px; }
+  .acc-avatar { width:54px; height:54px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:600; }
+  .acc-info strong { display:block; font-size:16px; color:var(--text); }
+  .acc-info span { font-size:12px; color:var(--muted); }
+  .acc-row { display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .acc-row:last-child { border-bottom:none; }
+  .acc-row .lbl { color:var(--muted); }
+  .acc-row .val { color:var(--text); font-weight:500; }
+  .plan-tag { font-size:10px; font-weight:700; padding:4px 12px; border-radius:14px; }
+
+
+  /* ═══ DASHBOARD EQUIPOS ═══ */
+  #s-dashboard { padding:24px 18px 90px; align-items:center; }
+  .dash-wrap { width:100%; max-width:680px; }
+  .dash-hero { text-align:center; margin-bottom:20px; }
+  .dash-hero h2 { font-family:'Cormorant Garamond',serif; font-size:30px; font-weight:300; }
+  .dash-hero p { font-size:12px; color:var(--muted); margin-top:4px; }
+  .dash-section { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px; margin-bottom:14px; box-shadow:0 2px 12px rgba(30,58,110,.04); }
+  .dash-sec-title { font-size:11px; letter-spacing:.15em; text-transform:uppercase; color:var(--accent); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+  .dash-sec-title::after { content:''; flex:1; height:1px; background:var(--border); }
+  /* map */
+  .dash-map { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .map-cell { text-align:center; padding:14px 6px; border-radius:12px; }
+  .map-count { font-family:'Cormorant Garamond',serif; font-size:32px; line-height:1; font-weight:300; }
+  .map-name { font-size:10px; text-transform:uppercase; letter-spacing:.08em; margin-top:4px; }
+  /* members */
+  .member-row { display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid var(--border); }
+  .member-row:last-child { border-bottom:none; }
+  .member-avatar { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:600; color:#fff; flex-shrink:0; }
+  .member-info { flex:1; }
+  .member-info strong { display:block; font-size:13px; color:var(--text); }
+  .member-info span { font-size:11px; }
+  .member-pending { font-size:10px; color:var(--muted); font-style:italic; }
+  .member-bio-tag { font-size:10px; font-weight:700; padding:3px 10px; border-radius:12px; }
+  /* balance bar */
+  .balance-bar { height:14px; border-radius:7px; overflow:hidden; display:flex; margin-bottom:10px; }
+  .balance-seg { height:100%; }
+  .balance-legend { display:flex; flex-wrap:wrap; gap:10px; font-size:11px; color:var(--muted); }
+  .balance-legend span { display:flex; align-items:center; gap:5px; }
+  .legend-dot { width:9px; height:9px; border-radius:50%; }
+  .dash-insight { font-size:12.5px; color:var(--muted); line-height:1.6; }
+  .dash-insight strong { color:var(--text); }
+  /* invite */
+  .invite-row { display:flex; gap:8px; margin-top:12px; }
+  .invite-input { flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:11px 13px; font-family:'DM Sans',sans-serif; font-size:13px; color:var(--text); outline:none; }
+  .invite-btn { background:var(--accent); color:#fff; border:none; border-radius:10px; padding:11px 18px; font-size:13px; font-weight:500; cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .compat-pair { display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--border); font-size:12px; }
+  .compat-pair:last-child { border-bottom:none; }
+  .compat-names { color:var(--text); }
+  .compat-score { font-weight:700; font-size:12px; }
+
+</style>
+</head>
+<body>
+
+<!-- ═══ INTRO ═══ -->
+<div class="screen active" id="s-intro">
+  <div style="max-width:580px;width:100%;text-align:center;">
+    <div style="display:inline-block;font-size:10.5px;letter-spacing:.12em;font-weight:700;text-transform:uppercase;color:#162544;border:1px solid #C59A3D;border-radius:50px;padding:7px 16px;margin-bottom:20px;animation:fadeUp .7s ease both;">La ciencia detrás de las personas más influyentes</div>
+    <h1 class="intro-title" style="color:#162544;">Bio<em style="color:#C59A3D">Tipo</em></h1>
+    <p style="font-size:11px;letter-spacing:.25em;text-transform:uppercase;color:var(--muted);margin-top:-8px;margin-bottom:22px;animation:fadeUp .7s .15s ease both;">Inteligencia Temperamental</p>
+
+    <h2 style="font-size:26px;line-height:1.22;font-weight:800;color:#162544;margin-bottom:14px;animation:fadeUp .7s .2s ease both;">Descubre en 60 segundos cómo influir mejor en las personas</h2>
+    <p class="intro-sub" style="margin-bottom:18px;color:#475569;">La mayoría de los conflictos, ventas perdidas y malos equipos tienen una causa: no entender cómo piensa la gente. BioTipo analiza tu perfil temperamental y te muestra cómo comunicarte, liderar y conectar con cada personalidad.</p>
+
+    <div style="text-align:left;max-width:360px;margin:0 auto 18px;font-size:14px;color:#1E293B;line-height:2;animation:fadeUp .7s .25s ease both;">
+      📈 Cierra más ventas<br>
+      🎯 Identifica qué motiva a cada persona<br>
+      🤝 Genera confianza más rápido<br>
+      🧠 Comunícate según cada perfil<br>
+      🚀 Lidera con mayor influencia
+    </div>
+
+    <button class="btn-primary" style="margin:6px 0 12px;background:#C59A3D;box-shadow:0 8px 20px rgba(22,37,68,0.15);" onclick="goTo('s-camera')">Descubrir mi biotipo gratis →</button>
+    <p style="font-size:12px;color:#162544;font-weight:600;margin-bottom:26px;">Prueba gratuita. Sin tarjeta. Resultados inmediatos.</p>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:0 0 6px;animation:fadeUp .7s .3s ease both;">
+      <span style="font-size:11px;padding:5px 11px;border-radius:50px;background:rgba(249,115,22,0.12);color:#F97316;font-weight:600;">Sanguíneo · DISC I</span>
+      <span style="font-size:11px;padding:5px 11px;border-radius:50px;background:rgba(217,119,6,0.12);color:#D97706;font-weight:600;">Colérico · DISC D</span>
+      <span style="font-size:11px;padding:5px 11px;border-radius:50px;background:rgba(37,99,235,0.12);color:#2563EB;font-weight:600;">Melancólico · DISC C</span>
+      <span style="font-size:11px;padding:5px 11px;border-radius:50px;background:rgba(22,163,74,0.12);color:#16A34A;font-weight:600;">Flemático · DISC S</span>
+    </div>
+
+    <p style="font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:var(--muted);margin:26px 0 12px;">Obtén tu perfil en menos de 60 segundos</p>
+    <div class="steps-row">
+      <div class="step-chip"><div class="step-chip-num">1</div>Sube una foto de tu mano</div>
+      <div class="step-chip"><div class="step-chip-num">2</div>La IA analiza tu morfología</div>
+      <div class="step-chip"><div class="step-chip-num">3</div>Responde 5 preguntas</div>
+      <div class="step-chip"><div class="step-chip-num">4</div>Recibe tu perfil completo</div>
+    </div>
+
+    <p style="font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:var(--muted);margin-bottom:14px;animation:fadeUp .7s .45s ease both;">¿Para qué quieres usar BioTipo?</p>
+    <div class="profile-select" style="animation:fadeUp .7s .5s ease both;">
+      <div class="profile-wrap">
+        <div class="profile-opt" id="prof-br" onclick="selectProfile('br',this)">
+          <div class="profile-ic">🏢</div>
+          <div class="profile-txt"><strong>Agente Inmobiliario</strong><span>Identifica cómo piensa cada cliente y cierra más operaciones</span></div>
+          <div class="profile-arrow">⌄</div>
+        </div>
+        <div class="profile-feats" id="feats-br"></div>
+      </div>
+      <div class="profile-wrap">
+        <div class="profile-opt" id="prof-mlm" onclick="selectProfile('mlm',this)">
+          <div class="profile-ic">🚀</div>
+          <div class="profile-txt"><strong>Líder de Redes de Mercadeo</strong><span>Motiva, desarrolla y retén a cada integrante de tu equipo</span></div>
+          <div class="profile-arrow">⌄</div>
+        </div>
+        <div class="profile-feats" id="feats-mlm"></div>
+      </div>
+      <div class="profile-wrap">
+        <div class="profile-opt selected" id="prof-personal" onclick="selectProfile('personal',this)">
+          <div class="profile-ic">✨</div>
+          <div class="profile-txt"><strong>Desarrollo Personal</strong><span>Comprende tus fortalezas y el impacto que generas en los demás</span></div>
+          <div class="profile-arrow">⌄</div>
+        </div>
+        <div class="profile-feats" id="feats-personal"></div>
+      </div>
+    </div>
+    <button class="btn-primary" style="margin-top:24px;background:#C59A3D;box-shadow:0 8px 20px rgba(22,37,68,0.15);" onclick="goTo('s-camera')">Descubrir mi biotipo →</button>
+    <p style="font-size:11px;color:var(--muted);margin-top:16px;animation:fadeUp .7s .6s ease both;">🔒 Tu imagen de mano se destruye automáticamente tras el análisis por seguridad</p>
+
+    <!-- ── Los 4 perfiles ── -->
+    <div style="margin-top:48px;padding-top:36px;border-top:1px solid var(--border);text-align:left;">
+      <h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#162544;text-align:center;margin-bottom:18px;">Los 4 perfiles principales</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="background:rgba(249,115,22,0.08);border-radius:14px;padding:16px;"><strong style="color:#F97316;">🟠 Sanguíneo</strong><p style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.5;">Influyente, sociable y persuasivo.</p></div>
+        <div style="background:rgba(217,119,6,0.08);border-radius:14px;padding:16px;"><strong style="color:#D97706;">🔴 Colérico</strong><p style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.5;">Competitivo, decidido y orientado a resultados.</p></div>
+        <div style="background:rgba(37,99,235,0.08);border-radius:14px;padding:16px;"><strong style="color:#2563EB;">🔵 Melancólico</strong><p style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.5;">Analítico, estratégico y detallista.</p></div>
+        <div style="background:rgba(22,163,74,0.08);border-radius:14px;padding:16px;"><strong style="color:#16A34A;">🟢 Flemático</strong><p style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.5;">Estable, paciente y conciliador.</p></div>
+      </div>
+    </div>
+
+    <!-- ── Segmentos ── -->
+    <div style="margin-top:40px;text-align:left;">
+      <h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#162544;text-align:center;margin-bottom:18px;">¿Para qué quieres usar BioTipo?</h3>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;"><strong style="font-size:15px;">🏢 Agente Inmobiliario</strong><p style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6;">Identifica cómo piensa cada cliente para generar más confianza, mejorar tu comunicación y cerrar más operaciones.</p></div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;"><strong style="font-size:15px;">🚀 Líder de Redes de Mercadeo</strong><p style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6;">Construye equipos más fuertes entendiendo cómo motivar, desarrollar y retener a cada integrante.</p></div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;"><strong style="font-size:15px;">✨ Desarrollo Personal</strong><p style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6;">Comprende tus fortalezas, áreas de mejora y el impacto que generas en las personas.</p></div>
+      </div>
+    </div>
+
+    <!-- ── Pain section ── -->
+    <div style="margin-top:40px;background:#162544;border-radius:18px;padding:30px 24px;text-align:center;">
+      <p style="font-size:17px;font-weight:800;color:#FFFFFF;line-height:1.4;">No pierdes oportunidades por falta de capacidad.</p>
+      <p style="font-size:14px;color:#C59A3D;font-weight:600;margin-top:8px;">Las pierdes porque cada persona necesita una comunicación diferente.</p>
+      <div style="font-size:13.5px;color:rgba(255,255,255,0.82);margin-top:18px;line-height:2;">
+        Muchos vendedores hablan demasiado.<br>
+        Muchos líderes presionan demasiado.<br>
+        Muchos profesionales interpretan mal a las personas.
+      </div>
+      <p style="font-size:14px;color:#FFFFFF;font-weight:700;margin-top:16px;">BioTipo te ayuda a entenderlas antes de cometer esos errores.</p>
+    </div>
+
+    <!-- ── Premium ── -->
+    <div style="margin-top:40px;border:1px solid #C59A3D;border-radius:18px;padding:28px 24px;text-align:left;">
+      <h3 style="font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#162544;text-align:center;">Desbloquea tu versión profesional</h3>
+      <p style="font-size:13px;color:var(--muted);text-align:center;margin:6px 0 16px;">Lleva tu análisis al siguiente nivel.</p>
+      <div style="font-size:13.5px;color:#1E293B;line-height:2;">
+        ✔ Reporte avanzado de personalidad<br>
+        ✔ Compatibilidad entre perfiles<br>
+        ✔ Estrategias de comunicación personalizadas<br>
+        ✔ Técnicas de liderazgo según tu biotipo<br>
+        ✔ Guías de ventas y negociación<br>
+        ✔ Actualizaciones continuas<br>
+        ✔ Herramientas exclusivas para profesionales
+      </div>
+      <button class="btn-primary" style="width:100%;margin-top:18px;background:#162544;" onclick="goTo('s-camera')">Activar membresía</button>
+    </div>
+
+    <!-- ── Final ── -->
+    <div style="margin-top:40px;text-align:center;">
+      <p style="font-size:16px;color:#162544;line-height:1.5;font-weight:700;max-width:460px;margin:0 auto 6px;">La diferencia entre una relación exitosa y una oportunidad perdida suele estar en la forma de comunicarte.</p>
+      <p style="font-size:13px;color:var(--muted);max-width:420px;margin:0 auto 18px;">Descubre tu BioTipo hoy y aprende a conectar con las personas de manera más efectiva.</p>
+      <button class="btn-primary" style="background:#C59A3D;box-shadow:0 8px 20px rgba(22,37,68,0.15);" onclick="window.scrollTo({top:0,behavior:'smooth'})">Comenzar gratis</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══ AUTH (login / registro) ═══ -->
+<div class="screen" id="s-auth">
+  <div class="auth-card">
+    <div class="auth-logo">Bio<em>Tipo</em></div>
+    <p style="text-align:center;font-size:12px;color:var(--muted);">Crea tu cuenta para guardar tu perfil</p>
+    <div class="auth-tab-row">
+      <div class="auth-tab active" id="tab-login" onclick="switchAuth('login')">Iniciar sesión</div>
+      <div class="auth-tab" id="tab-register" onclick="switchAuth('register')">Registrarme</div>
+    </div>
+    <div id="auth-name-field" class="auth-field" style="display:none;">
+      <label>Nombre</label>
+      <input type="text" id="auth-name" placeholder="Tu nombre"/>
+    </div>
+    <div class="auth-field">
+      <label>Correo electrónico</label>
+      <input type="email" id="auth-email" placeholder="tu@correo.com"/>
+    </div>
+    <div class="auth-field">
+      <label>Contraseña</label>
+      <input type="password" id="auth-pass" placeholder="••••••••"/>
+    </div>
+    <button class="auth-btn" id="auth-submit" onclick="doAuth()">Entrar</button>
+    <div class="auth-err" id="auth-err"></div>
+    <div class="auth-skip" onclick="goTo('s-intro')">Explorar sin cuenta →</div>
+
+    <div class="auth-test">
+      <div class="auth-test-title">⚡ Usuarios de prueba (demo)</div>
+      <div class="test-user" onclick="loginTest('free')">
+        <span class="test-user-ic">🆓</span>
+        <div class="test-user-txt"><strong>Demo Gratis</strong><span>Sin funciones premium</span></div>
+        <span class="test-user-plan" style="background:var(--surface2);color:var(--muted);">GRATIS</span>
+      </div>
+      <div class="test-user" onclick="loginTest('personal')">
+        <span class="test-user-ic">💎</span>
+        <div class="test-user-txt"><strong>Demo Personal</strong><span>$79 · individual</span></div>
+        <span class="test-user-plan" style="background:rgba(37,99,235,.12);color:var(--accent);">PERSONAL</span>
+      </div>
+      <div class="test-user" onclick="loginTest('pro')">
+        <span class="test-user-ic">🏆</span>
+        <div class="test-user-txt"><strong>Demo Profesional</strong><span>$199 · hasta 5</span></div>
+        <span class="test-user-plan" style="background:rgba(184,144,47,.15);color:var(--accent2);">PRO</span>
+      </div>
+      <div class="test-user" onclick="loginTest('equipos')">
+        <span class="test-user-ic">👥</span>
+        <div class="test-user-txt"><strong>Demo Equipos</strong><span>$499 · hasta 15 + dashboard</span></div>
+        <span class="test-user-plan" style="background:rgba(28,166,114,.15);color:var(--flem);">EQUIPOS</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MI CUENTA ═══ -->
+<div class="screen" id="s-account">
+  <div class="tool-header" style="max-width:440px;">
+    <div class="tool-back" onclick="goTo(window.currentBiotypeResult?'s-results':'s-intro')">←</div>
+    <div class="tool-h-txt"><strong>Mi cuenta</strong><span>Tu perfil y suscripción</span></div>
+  </div>
+  <div class="acc-card">
+    <div class="acc-head">
+      <div class="acc-avatar" id="acc-avatar">A</div>
+      <div class="acc-info"><strong id="acc-name">—</strong><span id="acc-email">—</span></div>
+    </div>
+    <div class="acc-row"><span class="lbl">Plan actual</span><span class="plan-tag" id="acc-plan">—</span></div>
+    <div class="acc-row"><span class="lbl">Mi biotipo</span><span class="val" id="acc-biotype">Sin diagnóstico</span></div>
+    <div class="acc-row"><span class="lbl">Consultas de coach usadas</span><span class="val" id="acc-coach">0</span></div>
+    <div class="acc-row"><span class="lbl">Análisis realizados</span><span class="val" id="acc-analyze">0</span></div>
+  </div>
+  <div class="acc-card" id="acc-actions"></div>
+  <button style="width:100%;max-width:440px;padding:13px;background:transparent;border:1px solid var(--border);border-radius:50px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;" onclick="logout()">Cerrar sesión</button>
+</div>
+
+<!-- ═══ CAMERA ═══ -->
+<div class="screen" id="s-camera">
+  <div class="cam-header">
+    <div class="step-label">Paso 1 — Análisis visual</div>
+    <h2 class="cam-title">Fotografía tu <em style="font-family:'Cormorant Garamond',serif;font-style:italic;">mano derecha</em></h2>
+    <p class="cam-desc">Extiende tu <strong style="color:var(--accent2)">mano derecha</strong> con la palma hacia la cámara, con buena luz natural. La IA analizará forma, proporciones y ratio de dedos.</p>
+    <div style="display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid rgba(37,99,235,.18);border-radius:12px;padding:12px 16px;margin-top:12px;max-width:400px;width:100%;">
+      <div style="font-size:36px;filter:scaleX(-1);transform:scaleX(-1);">🤚</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;">
+        <strong style="color:var(--text);display:block;margin-bottom:2px;">¿Cuál es la mano derecha?</strong>
+        Si eres diestro, es con la que escribes. Si eres zurdo, es la opuesta a la que usas para escribir.
+      </div>
+    </div>
+  </div>
+
+  <div class="cam-box" style="max-width:400px;width:100%;">
+    <div class="cam-preview" id="cam-preview">
+      <!-- Video stream -->
+      <video id="video-el" autoplay playsinline muted></video>
+      <!-- Canvas for capture -->
+      <canvas id="hand-canvas"></canvas>
+      <!-- Image preview after upload -->
+      <div class="img-preview-wrap" id="img-preview-wrap">
+        <img id="img-preview" alt="Tu mano"/>
+      </div>
+      <!-- Placeholder -->
+      <div class="cam-placeholder" id="cam-placeholder">
+        <div class="cam-placeholder-icon">🖐️</div>
+        <div class="cam-placeholder-text">Activa la cámara o sube una foto de tu mano</div>
+      </div>
+      <!-- Guide overlay -->
+      <div class="cam-overlay" id="cam-overlay" style="display:none;">
+        <div class="cam-guide"></div>
+        <div class="cam-guide-label">✋ Mano DERECHA — palma hacia la cámara</div>
+      </div>
+      <!-- Analyzing overlay -->
+      <div class="analyzing-overlay" id="analyzing-overlay">
+        <div class="scan-line"></div>
+        <div class="analyzing-text" style="color:var(--accent)">🔬 Analizando morfología...</div>
+        <div class="analyzing-sub">IA procesando tu mano</div>
+      </div>
+    </div>
+
+    <div class="cam-controls">
+      <button class="btn-cam btn-cam-start" id="btn-start-cam" onclick="startCamera()">
+        📷 Activar cámara
+      </button>
+      <button class="btn-cam btn-cam-capture" id="btn-capture" onclick="capturePhoto()">
+        ⚡ Tomar foto
+      </button>
+      <button class="btn-cam btn-cam-retake" id="btn-retake" onclick="retake()">
+        🔄 Tomar otra foto
+      </button>
+      <label class="btn-cam btn-cam-upload" style="cursor:pointer;">
+        🖼️ Subir foto de galería
+        <input type="file" id="file-input" accept="image/*" onchange="handleFileUpload(event)"/>
+      </label>
+      <div style="display:flex;align-items:flex-start;gap:10px;background:rgba(39,174,96,.08);border:1px solid rgba(39,174,96,.25);border-radius:10px;padding:11px 14px;margin-top:4px;">
+        <div style="font-size:16px;flex-shrink:0;">🔒</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.55;">
+          <strong style="color:var(--text);display:block;margin-bottom:2px;">Tu privacidad está protegida</strong>
+          Tu foto se usa únicamente para esta evaluación inicial. Se elimina automáticamente al terminar y <strong style="color:#27ae60;">nunca se guarda ni se comparte</strong> con nadie.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="error-msg" id="cam-error"></div>
+
+  <div class="nav-row">
+    <button class="btn-back" onclick="goTo('s-intro');stopCamera();">← Atrás</button>
+    <button class="btn-next" id="btn-cam-next" disabled onclick="proceedToQuestions()">Continuar →</button>
+  </div>
+</div>
+
+<!-- ═══ QUESTIONS ═══ -->
+<div class="screen" id="s-questions">
+  <div style="width:100%;max-width:480px;margin:auto;">
+    <div class="progress-wrap">
+      <div class="progress-info">
+        <span id="q-counter">Pregunta 1 de 5</span>
+        <span id="q-pct">20%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="q-bar" style="width:20%"></div></div>
+    </div>
+    <div class="step-label" style="text-align:center;margin-bottom:16px;">Paso 2 — Perfil conductual</div>
+    <div class="q-card" id="q-card">
+      <p class="q-text" id="q-text"></p>
+      <div class="q-opts" id="q-opts"></div>
+    </div>
+    <div class="nav-row">
+      <button class="btn-back" onclick="prevQ()">← Atrás</button>
+      <button class="btn-next" id="btn-q-next" disabled onclick="nextQ()">Siguiente →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PROCESSING ═══ -->
+<div class="screen" id="s-processing">
+  <div class="proc-orb"></div>
+  <h2 class="proc-title">Calculando tu perfil...</h2>
+  <p style="font-size:13px;color:var(--muted);text-align:center;">Combinando análisis morfológico y conductual</p>
+  <div class="proc-steps">
+    <div class="proc-step"><div class="proc-dot"></div>Ponderando morfología de mano</div>
+    <div class="proc-step"><div class="proc-dot"></div>Integrando respuestas conductuales</div>
+    <div class="proc-step"><div class="proc-dot"></div>Generando perfil personalizado</div>
+  </div>
+</div>
+
+<!-- ═══ RESULTS ═══ -->
+<div class="screen" id="s-results" style="padding-bottom:80px;">
+  <div style="width:100%;max-width:600px;margin:auto;display:flex;flex-direction:column;align-items:center;gap:12px;">
+
+    <!-- Tarjeta unirse a equipo (solo si llegó por enlace de invitación) -->
+    <div id="join-card" style="display:none;width:100%;background:linear-gradient(135deg,rgba(29,78,216,0.08),rgba(184,144,47,0.08));border:1px solid var(--accent);border-radius:16px;padding:18px;">
+      <p style="font-weight:700;color:var(--accent);margin-bottom:4px;">👥 Te invitaron a un equipo</p>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">Comparte tu biotipo con tu equipo. Escribe tu nombre para unirte.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input id="join-name" placeholder="Tu nombre" style="flex:1;min-width:160px;padding:11px 14px;border:1px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;"/>
+        <button class="invite-btn" onclick="joinTeam()">Unirme al equipo</button>
+      </div>
+      <p id="join-msg" style="font-size:12px;margin-top:8px;display:none;"></p>
+    </div>
+
+    <div class="res-hero">
+      <span class="res-badge">Tu biotipo principal</span>
+      <div class="res-name" id="res-name"></div>
+      <div class="res-tagline" id="res-tagline"></div>
+      <div id="res-disc" style="margin-top:10px;font-size:13px;color:var(--muted);letter-spacing:.02em;"></div>
+      <div class="res-meter" id="res-meter"></div>
+    </div>
+
+    <!-- IA Hand Analysis -->
+    <div class="hand-analysis-card">
+      <div class="ha-label">Lo que la IA vio en tu mano</div>
+      <div class="ha-text" id="ha-text">Cargando análisis...</div>
+    </div>
+
+    <div class="res-grid">
+      <div class="res-card">
+        <div class="card-lbl">Fortalezas</div>
+        <div class="tag-list" id="res-strengths"></div>
+      </div>
+      <div class="res-card">
+        <div class="card-lbl">Puntos ciegos</div>
+        <div class="tag-list" id="res-blindspots"></div>
+      </div>
+      <div class="res-card full">
+        <div class="card-lbl">Cómo comunicarte</div>
+        <div id="res-comm"></div>
+      </div>
+
+    </div>
+
+    <!-- ═══ TOOLS HUB ═══ -->
+    <div class="tools-hub">
+      <div class="tools-title">Tus herramientas</div>
+      <div class="tools-sub" id="tools-sub">Aplica tu biotipo a situaciones reales</div>
+      <div class="tools-grid" id="tools-grid"></div>
+    </div>
+
+    <div class="share-card">
+      <div id="share-premium-badge" style="display:none;justify-content:center;align-items:center;gap:6px;margin-bottom:10px;font-size:12px;font-weight:700;color:var(--accent2);background:rgba(184,144,47,0.12);padding:6px 14px;border-radius:50px;width:fit-content;margin-left:auto;margin-right:auto;">⭐ Miembro Premium</div>
+      <div class="share-title">Comparte tu resultado</div>
+      <div class="share-desc">¿Cuál es el biotipo de tus prospectos y equipo?</div>
+      <div class="share-btns">
+        <button class="btn-shr s-ig" onclick="doShare()">📸 Instagram</button>
+        <button class="btn-shr s-wa" onclick="doShare()">💬 WhatsApp</button>
+        <button class="btn-shr s-cp" onclick="doShare()">🔗 Copiar</button>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:4px;">
+      <button class="btn-primary" id="btn-unlock-all" onclick="goUnlock()">🔓 Desbloquear todo →</button>
+      <button style="padding:14px 20px;background:transparent;border:1px solid var(--border);border-radius:50px;color:var(--muted);font-family:DM Sans,sans-serif;font-size:13px;cursor:pointer;" onclick="resetAll()">Hacer de nuevo</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════ DATA ══════════════
+const BT = {
+  sanguineo: {
+    name:'Sanguíneo', disc:'I (Influyente)', discColor:'#f4c430', color:'#e8634a', soft:'rgba(232,99,74,0.15)',
+    tagline:'El alma de toda reunión — vivo, social, apasionado',
+    strengths:['Carisma','Comunicación','Optimismo','Energía','Creatividad'],
+    blindspots:['Impulsividad','Dispersión','Inconstancia'],
+    comm:[
+      {t:'Tu estilo natural', d:'Hablas con entusiasmo y emoción. La gente te recuerda por cómo los hace sentir.'},
+      {t:'Para convencer', d:'Usa historias. Conecta emocionalmente primero, luego presenta hechos.'},
+      {t:'Tu punto débil', d:'Hablas demasiado y escuchas poco. Practica hacer preguntas antes de responder.'},
+    ]
+  },
+  colerico: {
+    name:'Colérico', disc:'D (Dominante)', discColor:'#e8634a', color:'#d4853a', soft:'rgba(212,133,58,0.15)',
+    tagline:'Líder nato — decisivo, directo, orientado a resultados',
+    strengths:['Liderazgo','Decisión','Enfoque','Iniciativa','Resiliencia'],
+    blindspots:['Impaciencia','Autoritarismo','Escucha limitada'],
+    comm:[
+      {t:'Tu estilo natural', d:'Directo y orientado a resultados. Odias los rodeos y el tiempo perdido.'},
+      {t:'Para convencer', d:'Ve al punto. Muestra el resultado antes que el proceso. Datos y eficiencia son tus aliados.'},
+      {t:'Tu punto débil', d:'Puedes parecer frío o arrogante. Agrega una pregunta genuina antes de hablar de negocios.'},
+    ]
+  },
+  melancolico: {
+    name:'Melancólico', disc:'C (Concienzudo)', discColor:'#4a6fa5', color:'#7a8fc4', soft:'rgba(122,143,196,0.15)',
+    tagline:'El pensador profundo — analítico, creativo, perfeccionista',
+    strengths:['Análisis','Creatividad','Empatía','Precisión','Lealtad'],
+    blindspots:['Perfeccionismo','Pesimismo','Ensimismamiento'],
+    comm:[
+      {t:'Tu estilo natural', d:'Piensas antes de hablar. Tus palabras son precisas y llenas de matices.'},
+      {t:'Para convencer', d:'Prepara argumentos sólidos y bien documentados. La profundidad es tu poder.'},
+      {t:'Tu punto débil', d:'Sobre-analizas y tardas en llegar al punto. Practica dar tu conclusión primero.'},
+    ]
+  },
+  flematico: {
+    name:'Flemático', disc:'S (Estable)', discColor:'#6aab8e', color:'#6aab8e', soft:'rgba(106,171,142,0.15)',
+    tagline:'El ancla del equipo — sereno, diplomático, constante',
+    strengths:['Diplomacia','Paciencia','Constancia','Escucha','Lealtad'],
+    blindspots:['Indecisión','Resistencia al cambio','Evita conflictos'],
+    comm:[
+      {t:'Tu estilo natural', d:'Escuchas más de lo que hablas. Eso te da ventaja: sabes exactamente qué necesita cada persona.'},
+      {t:'Para convencer', d:'La confianza y la relación son tu base. Construye el vínculo primero.'},
+      {t:'Tu punto débil', d:'Tan diplomático que no dejas claro lo que quieres. Practica peticiones directas.'},
+    ]
+  }
+};
+
+const QUESTIONS = [
+  { text:"Hay un conflicto en tu equipo. ¿Cómo reaccionas de forma natural?", opts:[
+    {t:"Lo enfrento de inmediato — prefiero resolver rápido aunque incomode", b:'colerico'},
+    {t:"Trato de distender el ambiente con humor y energía positiva", b:'sanguineo'},
+    {t:"Analizo quién tiene razón antes de intervenir", b:'melancolico'},
+    {t:"Busco que ambas partes lleguen a un acuerdo sin más drama", b:'flematico'},
+  ]},
+  { text:"Tienes una meta importante. ¿Cómo la persigues?", opts:[
+    {t:"Con un plan estructurado y detallado, paso a paso", b:'melancolico'},
+    {t:"Me lanzo con todo — la energía del inicio me mueve", b:'sanguineo'},
+    {t:"Me enfoco, elimino distracciones y ejecuto sin parar", b:'colerico'},
+    {t:"Avanzo constante y pausado — sin prisa pero sin pausa", b:'flematico'},
+  ]},
+  { text:"Llegas a una reunión de negocios sin conocer a nadie. ¿Qué haces?", opts:[
+    {t:"Empiezo a presentarme con todos — me encanta conocer gente", b:'sanguineo'},
+    {t:"Busco alguien interesante y tengo una conversación de fondo", b:'melancolico'},
+    {t:"Tomo el control — propongo una dinámica o asumo el liderazgo", b:'colerico'},
+    {t:"Me quedo con las personas que ya conozco o espero que me presenten", b:'flematico'},
+  ]},
+  { text:"Alguien critica tu trabajo en público. ¿Cómo reaccionas?", opts:[
+    {t:"Lo encaro directamente — me defiendo o pido explicación", b:'colerico'},
+    {t:"Me afecta pero lo proceso internamente y luego lo analizo solo", b:'melancolico'},
+    {t:"Me dura poco — lo proceso rápido y sigo adelante", b:'sanguineo'},
+    {t:"Prefiero no crear conflicto — lo dejo pasar", b:'flematico'},
+  ]},
+  { text:"¿Qué papel juegas naturalmente en un equipo de trabajo?", opts:[
+    {t:"Quien motiva y contagia el entusiasmo al grupo", b:'sanguineo'},
+    {t:"Quien asegura que todo esté bien hecho y sin errores", b:'melancolico'},
+    {t:"Quien toma decisiones cuando nadie más lo hace", b:'colerico'},
+    {t:"Quien mantiene la paz y a todos colaborando juntos", b:'flematico'},
+  ]}
+];
+
+// ══════════════ STATE ══════════════
+let userProfile='personal'; // br | mlm | personal
+let userPlan='free';        // free | personal | pro | equipos
+let coachQuotaUsed=0, analyzeQuotaUsed=0;
+let coachHistory=[];
+let stream = null;
+let capturedImageBase64 = null;
+let handAnalysisResult = null;
+let currentQ = 0;
+let answers = [];
+let scores = {sanguineo:0, colerico:0, melancolico:0, flematico:0};
+
+// ══════════════ NAVIGATION ══════════════
+function goTo(id) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+
+// ══════════════ CAMERA ══════════════
+async function startCamera() {
+  try {
+    showError('');
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:960} }
+    });
+    const video = document.getElementById('video-el');
+    video.srcObject = stream;
+    video.style.display = 'block';
+    document.getElementById('cam-placeholder').style.display = 'none';
+    document.getElementById('cam-overlay').style.display = 'flex';
+    document.getElementById('btn-start-cam').style.display = 'none';
+    document.getElementById('btn-capture').style.display = 'flex';
+  } catch(e) {
+    showError('No se pudo acceder a la cámara. Puedes subir una foto desde tu galería.');
+  }
+}
+
+function capturePhoto() {
+  const video = document.getElementById('video-el');
+  const canvas = document.getElementById('hand-canvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+  capturedImageBase64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+  stopCamera();
+  showCapturedState();
+  analyzeHandWithAI(capturedImageBase64);
+}
+
+function handleFileUpload(e) {
+  const file = e.target.files[0];
+  if(!file) return;
+  stopCamera();
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const dataUrl = ev.target.result;
+    capturedImageBase64 = dataUrl.split(',')[1];
+    document.getElementById('img-preview').src = dataUrl;
+    document.getElementById('img-preview-wrap').style.display = 'block';
+    document.getElementById('cam-placeholder').style.display = 'none';
+    document.getElementById('cam-overlay').style.display = 'none';
+    document.getElementById('btn-start-cam').style.display = 'none';
+    document.getElementById('btn-capture').style.display = 'none';
+    document.getElementById('btn-retake').style.display = 'flex';
+    analyzeHandWithAI(capturedImageBase64);
+  };
+  reader.readAsDataURL(file);
+}
+
+function showCapturedState() {
+  const canvas = document.getElementById('hand-canvas');
+  document.getElementById('video-el').style.display = 'none';
+  canvas.style.display = 'block';
+  document.getElementById('cam-overlay').style.display = 'none';
+  document.getElementById('btn-capture').style.display = 'none';
+  document.getElementById('btn-retake').style.display = 'flex';
+}
+
+function stopCamera() {
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+}
+
+function retake() {
+  capturedImageBase64 = null;
+  handAnalysisResult = null;
+  document.getElementById('hand-canvas').style.display = 'none';
+  document.getElementById('img-preview-wrap').style.display = 'none';
+  document.getElementById('cam-placeholder').style.display = 'flex';
+  document.getElementById('cam-overlay').style.display = 'none';
+  document.getElementById('btn-start-cam').style.display = 'flex';
+  document.getElementById('btn-capture').style.display = 'none';
+  document.getElementById('btn-retake').style.display = 'none';
+  document.getElementById('btn-cam-next').disabled = true;
+  document.getElementById('analyzing-overlay').classList.remove('active');
+  showError('');
+}
+
+// ══════════════ AI HAND ANALYSIS ══════════════
+async function analyzeHandWithAI(base64Image) {
+  const overlay = document.getElementById('analyzing-overlay');
+  overlay.classList.add('active');
+  document.getElementById('btn-cam-next').disabled = true;
+  showError('');
+
+  try {
+    const response = await fetch('/api/chat', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        
+        max_tokens: 1000,
+        system: `Eres un experto en morfología de manos y biotipos hipocráticos. Primero verifica si la imagen muestra CLARAMENTE una mano humana (palma o dorso con dedos visibles). Responde ÚNICAMENTE en JSON válido, sin texto adicional, sin markdown:
+{
+  "es_mano": true|false,
+  "forma_palma": "cuadrada|rectangular|larga",
+  "dedos": "cortos|medios|largos",
+  "ratio_digital": "indice_mayor|equilibrado|anular_mayor",
+  "biotipo_sugerido": "sanguineo|colerico|melancolico|flematico",
+  "biotipo_secundario": "sanguineo|colerico|melancolico|flematico",
+  "puntuaciones": {"sanguineo": 0, "colerico": 0, "melancolico": 0, "flematico": 0},
+  "descripcion": "Descripción breve en 2-3 oraciones en español."
+}
+REGLA CRÍTICA: Si la imagen NO muestra una mano humana clara (es un objeto, paisaje, edificio, animal, rostro, etc.), pon "es_mano": false y deja el resto en valores vacíos o cero. NO inventes un análisis de mano si no hay mano. Si SÍ hay una mano, pon "es_mano": true y las puntuaciones deben sumar exactamente 100.`,
+        messages:[{
+          role:'user',
+          content:[
+            { type:'image', source:{ type:'base64', media_type:'image/jpeg', data: base64Image }},
+            { type:'text', text:'¿Esta imagen muestra una mano humana? Si sí, analízala y determina el biotipo. Si no, indica es_mano: false.' }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+
+    if(data.error) throw new Error(data.error.message || 'Error de API');
+
+    const rawText = data.content.find(b=>b.type==='text')?.text || '{}';
+    const clean = rawText.replace(/```json|```/g,'').trim();
+    const result = JSON.parse(clean);
+
+    // Validar que sea una mano
+    if(result.es_mano === false){
+      overlay.classList.remove('active');
+      document.getElementById('btn-cam-next').disabled = true;
+      showError('⚠️ No detecté una mano en la foto. Por favor sube una foto clara de tu mano derecha, palma hacia la cámara.');
+      handAnalysisResult = null;
+      return;
+    }
+
+    handAnalysisResult = result;
+
+    overlay.classList.remove('active');
+    document.getElementById('btn-cam-next').disabled = false;
+    showError('');
+
+  } catch(err) {
+    overlay.classList.remove('active');
+    // Si falla la conexión, pedir reintentar (no inventar resultado)
+    handAnalysisResult = null;
+    document.getElementById('btn-cam-next').disabled = true;
+    showError('No pude analizar la imagen. Revisa tu conexión e intenta de nuevo con una foto clara de tu mano.');
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('cam-error');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+// ══════════════ PROCEED TO QUESTIONS ══════════════
+function proceedToQuestions() {
+  stopCamera();
+  currentQ = 0;
+  answers = [];
+  scores = {sanguineo:0, colerico:0, melancolico:0, flematico:0};
+  goTo('s-questions');
+  renderQ();
+}
+
+// ══════════════ QUESTIONS ══════════════
+function renderQ() {
+  const q = QUESTIONS[currentQ];
+  document.getElementById('q-text').textContent = q.text;
+  document.getElementById('q-counter').textContent = `Pregunta ${currentQ+1} de ${QUESTIONS.length}`;
+  const pct = Math.round(((currentQ+1)/QUESTIONS.length)*100);
+  document.getElementById('q-pct').textContent = pct+'%';
+  document.getElementById('q-bar').style.width = pct+'%';
+
+  const letters=['A','B','C','D'];
+  const container = document.getElementById('q-opts');
+  container.innerHTML='';
+  q.opts.forEach((opt,i)=>{
+    const btn = document.createElement('button');
+    btn.className='q-opt'+(answers[currentQ]===opt.b?' sel':'');
+    btn.innerHTML=`<span class="q-letter">${letters[i]}</span><span>${opt.t}</span>`;
+    btn.onclick=()=>{
+      document.querySelectorAll('.q-opt').forEach(o=>o.classList.remove('sel'));
+      btn.classList.add('sel');
+      answers[currentQ]=opt.b;
+      document.getElementById('btn-q-next').disabled=false;
+    };
+    container.appendChild(btn);
+  });
+
+  document.getElementById('btn-q-next').disabled=!answers[currentQ];
+  const card=document.getElementById('q-card');
+  card.style.animation='none'; void card.offsetWidth; card.style.animation='fadeUp 0.4s ease both';
+}
+
+function nextQ() {
+  if(currentQ < QUESTIONS.length-1){ currentQ++; renderQ(); }
+  else calculateResults();
+}
+
+function prevQ() {
+  if(currentQ>0){ currentQ--; renderQ(); }
+  else goTo('s-camera');
+}
+
+// ══════════════ CALCULATE ══════════════
+function calculateResults() {
+  goTo('s-processing');
+  scores = {sanguineo:0, colerico:0, melancolico:0, flematico:0};
+
+  // Weight from AI hand analysis (40%)
+  if(handAnalysisResult?.puntuaciones) {
+    Object.entries(handAnalysisResult.puntuaciones).forEach(([k,v])=>{
+      if(scores.hasOwnProperty(k)) scores[k] += v * 0.4;
+    });
+  }
+
+  // Weight from questions (60%)
+  answers.forEach(b=>{ if(b && scores.hasOwnProperty(b)) scores[b]+=12; });
+
+  setTimeout(()=>{
+    renderResults();
+    if(currentUser){
+      window.currentBiotypeResult = Object.entries(scores).sort((a,b)=>b[1]-a[1])[0][0];
+      currentUser.biotype = window.currentBiotypeResult;
+      currentUser.scores = scores;
+      if(handAnalysisResult) currentUser.handDesc = handAnalysisResult.descripcion;
+      persistUser();
+    }
+    goTo('s-results');
+  }, 2800);
+}
+
+// ══════════════ RENDER RESULTS ══════════════
+function renderResults() {
+  const sorted = Object.entries(scores).sort((a,b)=>b[1]-a[1]);
+  const primary = sorted[0][0];
+  const bt = BT[primary];
+  window.currentBiotypeResult = primary;   // marca que ya hizo diagnóstico
+
+  document.getElementById('res-name').textContent = bt.name;
+  document.getElementById('res-name').style.color = bt.color;
+  document.getElementById('res-tagline').textContent = bt.tagline;
+  // Equivalente DISC
+  const discEl = document.getElementById('res-disc');
+  if(discEl){ discEl.innerHTML = `Equivalente DISC: <strong style="color:${bt.discColor}">${bt.disc}</strong>`; }
+
+  // Hand analysis text
+  if(handAnalysisResult?.descripcion) {
+    document.getElementById('ha-text').textContent = handAnalysisResult.descripcion;
+  } else {
+    document.getElementById('ha-text').textContent = 'Tu análisis morfológico está completo. Tu biotipo refleja tu temperamento dominante.';
+  }
+
+  // Meter
+  const total = sorted.reduce((s,[,v])=>s+v,0)||1;
+  document.getElementById('res-meter').innerHTML = sorted.map(([type,score])=>{
+    const b=BT[type]; const pct=Math.round((score/total)*100);
+    return `<div class="m-item">
+      <div class="m-name">${b.name}</div>
+      <div style="font-size:10px;color:${b.discColor};font-weight:600;margin-bottom:4px;">DISC: ${b.disc.split(' ')[0]}</div>
+      <div class="m-bar"><div class="m-fill" style="width:${pct}%;background:${b.color};"></div></div>
+      <div class="m-pct" style="color:${b.color};">${pct}%</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('res-strengths').innerHTML =
+    bt.strengths.map(s=>`<span class="tag" style="background:${bt.soft};color:${bt.color};">${s}</span>`).join('');
+  document.getElementById('res-blindspots').innerHTML =
+    bt.blindspots.map(s=>`<span class="tag" style="background:rgba(255,255,255,0.05);color:var(--muted);">${s}</span>`).join('');
+  document.getElementById('res-comm').innerHTML =
+    bt.comm.map(c=>`<div class="comm-item"><strong>${c.t}</strong>${c.d}</div>`).join('');
+
+  renderToolsHub();
+  if(currentUser){ currentUser.biotype=primary; persistUser(); }
+  // Mostrar tarjeta de unirse a equipo si llegó por invitación
+  const jc=document.getElementById('join-card');
+  if(jc) jc.style.display = window.joinTeamToken ? 'block' : 'none';
+}
+
+async function joinTeam(){
+  const token=window.joinTeamToken;
+  const name=(document.getElementById('join-name').value||'').trim();
+  const msg=document.getElementById('join-msg');
+  if(!name){ msg.style.display='block'; msg.style.color='var(--cole)'; msg.textContent='Escribe tu nombre.'; return; }
+  const bio=window.currentBiotypeResult||null;
+  try{
+    const r=await fetch('/api/team',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'join',token,name,biotype:bio})});
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    window.joinTeamToken=null;
+    msg.style.display='block'; msg.style.color='var(--flem)';
+    msg.textContent='✅ ¡Listo! Ya formas parte del equipo.';
+    document.getElementById('join-name').disabled=true;
+  }catch(e){
+    msg.style.display='block'; msg.style.color='var(--cole)';
+    msg.textContent='No se pudo unir: '+e.message;
+  }
+}
+
+// ══════════════ SHARE & UNLOCK ══════════════
+function doShare() {
+  const name = document.getElementById('res-name').textContent;
+  const key = window.currentBiotypeResult;
+  const discTxt = (key && BT[key]) ? ` (DISC: ${BT[key].disc})` : '';
+  const esDemo = currentUser && currentUser.email && currentUser.email.endsWith('@demo.com');
+  const esPago = currentUser && userPlan && userPlan!=='free' && !esDemo;
+  const premiumLine = esPago ? '\n⭐ Miembro Premium de BioTipo' : '';
+  const text = `Descubrí que soy ${name}${discTxt} según la teoría de biotipos de Hipócrates 🧬${premiumLine}\n¿Cuál es el tuyo? → biotipo.app`;
+  if(navigator.share) {
+    navigator.share({ title:'Mi BioTipo', text }).catch(()=>{});
+  } else if(navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(()=>alert('¡Texto copiado para compartir!'));
+  }
+}
+
+async function selectPlan(plan) {
+  // Usuarios demo: no pagan; se les invita a crear cuenta real
+  if (currentUser && currentUser.email && currentUser.email.endsWith('@demo.com')) {
+    alert('Estás en modo demostración. Crea tu cuenta real para suscribirte.');
+    goToRegisterReal();
+    return;
+  }
+
+  // Usuarios reales: abrir pago de Stripe
+  const email = (currentUser && currentUser.email) ? currentUser.email : '';
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.textContent = 'Abriendo pago...'; }
+  try {
+    const res = await fetch('/api/checkout', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ plan, email })
+    });
+    const data = await res.json();
+    if (data.url) {
+      window.location.href = data.url;   // redirige a Stripe Checkout
+    } else {
+      alert('No se pudo abrir el pago: ' + (data.error||'intenta de nuevo'));
+      if (btn) { btn.disabled = false; btn.textContent = 'Reintentar'; }
+    }
+  } catch(e) {
+    alert('Error de conexión al abrir el pago.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Reintentar'; }
+  }
+}
+
+
+
+// ══════════════ CUENTAS / AUTH ══════════════
+let authMode='login';
+let currentUser=null;
+
+const TEST_USERS = {
+  free:    {name:'Demo Gratis', email:'gratis@demo.com', plan:'free'},
+  personal:{name:'Demo Personal', email:'personal@demo.com', plan:'personal'},
+  pro:     {name:'Demo Profesional', email:'pro@demo.com', plan:'pro'},
+  equipos: {name:'Demo Equipos', email:'equipos@demo.com', plan:'equipos'}
+};
+
+const PLAN_LABEL = {
+  free:{txt:'GRATIS', bg:'var(--surface2)', col:'var(--muted)'},
+  personal:{txt:'PERSONAL', bg:'rgba(37,99,235,.12)', col:'var(--accent)'},
+  pro:{txt:'PROFESIONAL', bg:'rgba(184,144,47,.15)', col:'var(--accent2)'},
+  equipos:{txt:'EQUIPOS', bg:'rgba(28,166,114,.15)', col:'var(--flem)'}
+};
+
+// localStorage helpers (funciona al publicar en GitHub/Netlify)
+function loadUsers(){ try{ return JSON.parse(localStorage.getItem('biotipo_users')||'{}'); }catch(e){ return {}; } }
+function saveUsers(u){ try{ localStorage.setItem('biotipo_users', JSON.stringify(u)); }catch(e){} }
+function saveSession(){ try{ localStorage.setItem('biotipo_session', JSON.stringify(currentUser)); }catch(e){} }
+function clearSession(){ try{ localStorage.removeItem('biotipo_session'); }catch(e){} }
+
+// Cuentas de prueba: ahora se auto-crean en D1 al primer login (ver /api/user).
+function seedTestAccounts(){ /* migrado a D1 */ }
+
+function switchAuth(mode){
+  authMode=mode;
+  document.getElementById('tab-login').classList.toggle('active', mode==='login');
+  document.getElementById('tab-register').classList.toggle('active', mode==='register');
+  document.getElementById('auth-name-field').style.display = mode==='register'?'block':'none';
+  document.getElementById('auth-submit').textContent = mode==='register'?'Crear cuenta':'Entrar';
+  document.getElementById('auth-err').style.display='none';
+}
+
+function authErr(msg){ const e=document.getElementById('auth-err'); e.textContent=msg; e.style.display='block'; }
+
+async function doAuth(){
+  const email=document.getElementById('auth-email').value.trim().toLowerCase();
+  const pass=document.getElementById('auth-pass').value;
+  if(!email||!pass){ authErr('Completa correo y contraseña'); return; }
+  const btn=document.getElementById('auth-submit');
+  const name = authMode==='register' ? document.getElementById('auth-name').value.trim() : '';
+  if(authMode==='register' && !name){ authErr('Escribe tu nombre'); return; }
+  if(btn){ btn.disabled=true; btn.textContent='Conectando…'; }
+  try{
+    const r=await fetch('/api/user',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:authMode, email, pass, name})});
+    const d=await r.json();
+    if(d.error){ authErr(d.error); if(btn){btn.disabled=false;btn.textContent=authMode==='register'?'Crear cuenta':'Entrar';} return; }
+    // Cachear en localStorage para sesión rápida
+    const users=loadUsers();
+    users[email]={...users[email], ...d.user, pass};
+    saveUsers(users);
+    if(btn){ btn.disabled=false; btn.textContent=authMode==='register'?'Crear cuenta':'Entrar'; }
+    setUser(d.user);
+  }catch(e){
+    // Sin conexión: usar localStorage como respaldo
+    const users=loadUsers();
+    if(authMode==='register'){
+      if(users[email]){ authErr('Ese correo ya está registrado'); }
+      else { users[email]={name,email,pass,plan:'free',biotype:null,coachUsed:0,analyzeUsed:0}; saveUsers(users); setUser(users[email]); }
+    }else{
+      if(!users[email]){ authErr('No se pudo conectar. Revisa tu internet.'); }
+      else if(users[email].pass!==pass){ authErr('Contraseña incorrecta'); }
+      else setUser(users[email]);
+    }
+    if(btn){ btn.disabled=false; btn.textContent=authMode==='register'?'Crear cuenta':'Entrar'; }
+  }
+}
+
+function loginGoogle(){
+  // Simulación para demo — en producción se integra OAuth de Google
+  const email='usuario.google@gmail.com';
+  const users=loadUsers();
+  if(!users[email]) users[email]={name:'Usuario Google',email,pass:null,plan:'free',biotype:null,coachUsed:0,analyzeUsed:0};
+  saveUsers(users);
+  setUser(users[email]);
+}
+
+function loginTest(plan){
+  const t=TEST_USERS[plan];
+  currentUser={...t, biotype:null, coachUsed:0, analyzeUsed:0};
+  userPlan=t.plan;
+  saveSession();
+  enterApp();
+}
+
+function setUser(u){
+  currentUser=u;
+  userPlan=u.plan;
+  coachQuotaUsed=u.coachUsed||0;
+  analyzeQuotaUsed=u.analyzeUsed||0;
+  // Normalizar biotipo: aceptar clave ("melancolico") o nombre ("Melancólico")
+  let bioKey = u.biotype;
+  if(bioKey && !BT[bioKey]){
+    const found = Object.keys(BT).find(k=>BT[k].name===bioKey);
+    if(found){ bioKey=found; currentUser.biotype=found; }
+  }
+  // Recuperar biotipo guardado en la cuenta hacia variables globales
+  if(bioKey && BT[bioKey]){
+    window.currentBiotypeResult = bioKey;
+    if(u.scores) scores = u.scores;
+    if(u.handDesc) handAnalysisResult = {descripcion:u.handDesc};
+    try{ renderResults(); }catch(e){ console.warn('renderResults:', e); }
+  }
+  if(u.profile) userProfile = u.profile;
+  saveSession();
+  enterApp();
+}
+
+function enterApp(){
+  renderAccountBar();
+  // Si ya hizo el diagnóstico (es invitado que viene de resultados), regresa ahí
+  if(window.currentBiotypeResult){
+    renderToolsHub();
+    if(window.pendingUnlock){ window.pendingUnlock=false; goTo('s-pricing'); }
+    else goTo('s-results');
+  } else {
+    goTo('s-intro');
+  }
+}
+
+// Desbloquear: si es invitado sin cuenta, pedir login/registro primero
+function goUnlock(){
+  if(!currentUser){
+    window.pendingUnlock = true;
+    switchAuth('register');
+    goTo('s-auth');
+  } else {
+    goTo('s-pricing');
+  }
+}
+
+function renderAccountBar(){
+  // remove existing
+  document.querySelectorAll('.account-bar').forEach(e=>e.remove());
+  if(!currentUser){
+    // Invitado: mostrar botón de iniciar sesión
+    const g=document.createElement('div');
+    g.className='account-bar';
+    g.onclick=()=>{ switchAuth('login'); goTo('s-auth'); };
+    g.innerHTML=`<span class="ab-name">Iniciar sesión</span><span class="ab-avatar">↪</span>`;
+    document.body.appendChild(g);
+    return;
+  }
+  const p=PLAN_LABEL[userPlan]||PLAN_LABEL.free;
+  const bar=document.createElement('div');
+  bar.className='account-bar';
+  bar.onclick=openAccount;
+  bar.innerHTML=`<span class="ab-name">${currentUser.name.split(' ')[0]}</span><span class="ab-plan" style="background:${p.bg};color:${p.col};">${p.txt}</span><span class="ab-avatar">${currentUser.name[0].toUpperCase()}</span>`;
+  document.body.appendChild(bar);
+}
+
+function openAccount(){
+  if(!currentUser) return;
+  document.getElementById('acc-avatar').textContent=currentUser.name[0].toUpperCase();
+  document.getElementById('acc-name').textContent=currentUser.name;
+  document.getElementById('acc-email').textContent=currentUser.email;
+  const p=PLAN_LABEL[userPlan]||PLAN_LABEL.free;
+  const pt=document.getElementById('acc-plan');
+  pt.textContent=p.txt; pt.style.background=p.bg; pt.style.color=p.col;
+  document.getElementById('acc-biotype').textContent = (currentUser.biotype && BT[currentUser.biotype]) ? BT[currentUser.biotype].name : (currentUser.biotype || 'Sin diagnóstico');
+  document.getElementById('acc-coach').textContent = (userPlan==='personal') ? coachQuotaUsed+' / 20' : coachQuotaUsed;
+  document.getElementById('acc-analyze').textContent = analyzeQuotaUsed;
+  // actions
+  const act=document.getElementById('acc-actions');
+  const esDemo = currentUser.email && currentUser.email.endsWith('@demo.com');
+  if(esDemo){
+    act.innerHTML=`<div style="text-align:center;"><p style="font-size:13px;color:var(--muted);margin-bottom:6px;">Estás en una cuenta de demostración.</p><p style="font-size:12px;color:var(--muted);margin-bottom:14px;">Para suscribirte y guardar tu perfil, crea tu cuenta real.</p><button class="auth-btn" onclick="goToRegisterReal()">Crear mi cuenta →</button></div>`;
+  } else if(userPlan==='free'){
+    act.innerHTML=`<div style="text-align:center;"><p style="font-size:13px;color:var(--muted);margin-bottom:12px;">Desbloquea todas las herramientas</p><button class="auth-btn" onclick="goTo('s-pricing')">Ver planes →</button></div>`;
+  }else{
+    act.innerHTML=`<div class="acc-row"><span class="lbl">Estado</span><span class="val" style="color:var(--flem);">● Activo</span></div><div class="acc-row"><span class="lbl">Renovación</span><span class="val">Mensual automática</span></div><button style="width:100%;margin-top:14px;padding:11px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;" onclick="goTo('s-pricing')">Cambiar plan</button>`;
+  }
+  goTo('s-account');
+}
+
+// Salir del demo y registrar cuenta real
+function goToRegisterReal(){
+  const bio = currentUser && currentUser.biotype;
+  currentUser=null; userPlan='free'; coachQuotaUsed=0; analyzeQuotaUsed=0;
+  clearSession();
+  document.querySelectorAll('.account-bar').forEach(e=>e.remove());
+  renderAccountBar();
+  window.pendingUnlock = true;   // tras registrarse, irá a precios
+  switchAuth('register');
+  goTo('s-auth');
+}
+
+function logout(){
+  currentUser=null; userPlan='free'; coachQuotaUsed=0; analyzeQuotaUsed=0;
+  window.currentBiotypeResult=null; window.pendingUnlock=false;
+  // Limpiar foto y datos del diagnóstico del DOM y memoria (privacidad)
+  capturedImageBase64=null; handAnalysisResult=null;
+  scores={sanguineo:0,colerico:0,melancolico:0,flematico:0};
+  try{ stopCamera(); }catch(e){}
+  try{
+    const p=document.getElementById('img-preview'); if(p) p.src='';
+    const c=document.getElementById('hand-canvas'); if(c){ const ctx=c.getContext('2d'); ctx&&ctx.clearRect(0,0,c.width,c.height); }
+    retake();
+  }catch(e){}
+  clearSession();
+  document.querySelectorAll('.account-bar').forEach(e=>e.remove());
+  renderAccountBar();
+  goTo('s-intro');
+}
+
+// persist plan/usage changes back to user record
+function persistUser(){
+  if(!currentUser) return;
+  currentUser.plan=userPlan; currentUser.coachUsed=coachQuotaUsed; currentUser.analyzeUsed=analyzeQuotaUsed;
+  if(window.currentBiotypeResult){ currentUser.biotype=window.currentBiotypeResult; currentUser.scores=scores; if(handAnalysisResult) currentUser.handDesc=handAnalysisResult.descripcion; }
+  if(currentUser.email && !currentUser.email.includes('@demo.com')){
+    const users=loadUsers();
+    if(users[currentUser.email]){ users[currentUser.email]={...users[currentUser.email],...currentUser}; saveUsers(users); }
+    // Guardar en D1 para acceso multi-dispositivo (no bloqueante)
+    saveUserToCloud();
+  }
+  saveSession();
+}
+
+function saveUserToCloud(){
+  if(!currentUser || !currentUser.email || currentUser.email.includes('@demo.com')) return;
+  try{
+    fetch('/api/user',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        action:'save', email:currentUser.email,
+        biotype:window.currentBiotypeResult||currentUser.biotype||null,
+        scores:scores, handDesc:(handAnalysisResult&&handAnalysisResult.descripcion)||currentUser.handDesc||null,
+        profile:userProfile||currentUser.profile||null,
+        coachUsed:coachQuotaUsed, analyzeUsed:analyzeQuotaUsed
+      })}).catch(()=>{});
+  }catch(e){}
+}
+
+// restore session on load
+function restoreSession(){
+  try{
+    const s=JSON.parse(localStorage.getItem('biotipo_session')||'null');
+    if(s){
+      currentUser=s; userPlan=s.plan||'free';
+      coachQuotaUsed=s.coachUsed||0; analyzeQuotaUsed=s.analyzeUsed||0;
+      renderAccountBar();
+      // Si ya tiene biotipo diagnosticado, abre en sus herramientas
+      if(s.biotype && BT[s.biotype]){
+        window.currentBiotypeResult = s.biotype;
+        scores = s.scores || scores;
+        if(s.handDesc){ handAnalysisResult = {descripcion: s.handDesc}; }
+        renderResults();
+        renderToolsHub();
+        goTo('s-results');
+      } else {
+        goTo('s-intro');
+      }
+    }
+  }catch(e){}
+}
+
+
+// ══════════════ PROFILE ══════════════
+const PROFILE_FEATS = {
+  br: [
+    ['🎯','Coach de bolsillo','Consejo exacto para cualquier situación con un cliente'],
+    ['🔍','Lee a tu cliente en 5 minutos','Identifica su biotipo y cómo tratarlo'],
+    ['💰','El cierre exacto por tipo de cliente','La misma propiedad presentada de 4 formas'],
+    ['🛡️','Desarma cualquier objeción','La respuesta correcta según su temperamento'],
+    ['⏱️','El seguimiento que no espanta','Cuándo y cómo contactar según el cliente'],
+    ['💼','Tu radiografía como vendedor','Tus fortalezas y errores al negociar'],
+  ],
+  mlm: [
+    ['🎯','Coach de bolsillo','Consejo exacto para prospectos y tu equipo'],
+    ['🚀','Prospecta sin que te rechacen','Cómo invitar y cerrar según el tipo de persona'],
+    ['🔥','Motiva a cada quien por lo que le mueve','El detonante de cada biotipo'],
+    ['👥','Radiografía de tu equipo','Cómo desarrollar a cada miembro'],
+    ['🔄','Duplica según cómo aprende cada integrante del equipo','Enseña el negocio a su medida'],
+    ['⭐','Detecta quién va a construir','Quién tiene perfil de líder'],
+  ],
+  personal: [
+    ['🎯','Coach de bolsillo','Consejo para cualquier situación de tu vida'],
+    ['✨','Conócete de verdad','Tu perfil completo en 8 dimensiones'],
+    ['🔍','Entiende a quien te saca de quicio','Analiza a tu pareja, jefe o familiar'],
+    ['💬','Las palabras exactas para cada persona','Qué decir y qué evitar según su tipo'],
+    ['❤️','Tu compatibilidad con cualquiera','En pareja, amistad y trabajo'],
+    ['📅','Reto mensual para crecer','Un desafío de 7 días para tu biotipo'],
+  ]
+};
+
+function renderProfileFeats(){
+  ['br','mlm','personal'].forEach(p=>{
+    const el = document.getElementById('feats-'+p);
+    if(el && !el.dataset.done){
+      el.innerHTML = '<div class="profile-feats-inner">' +
+        PROFILE_FEATS[p].map(f=>`<div class="pf-item"><span class="pf-ic">${f[0]}</span><span class="pf-txt"><strong>${f[1]}</strong><span>${f[2]}</span></span></div>`).join('') +
+        '</div>';
+      el.dataset.done='1';
+    }
+  });
+}
+
+function selectProfile(p, el){
+  userProfile = p;
+  document.querySelectorAll('.profile-opt').forEach(o=>o.classList.remove('selected'));
+  document.querySelectorAll('.profile-feats').forEach(f=>f.classList.remove('open'));
+  el.classList.add('selected');
+  renderProfileFeats();
+  document.getElementById('feats-'+p).classList.add('open');
+}
+
+const PROFILE_INFO = {
+  br: { label:'Agente de Bienes Raíces', coachTitle:'Coach de bolsillo', coachSub:'Situaciones con clientes y propietarios',
+        sugg:['Tengo cita con un comprador indeciso','El cliente dice que está caro','Quiero captar una propiedad en exclusiva'],
+        focus:'cerrar ventas inmobiliarias y captar propiedades' },
+  mlm:{ label:'Líder de Red de Mercadeo', coachTitle:'Coach de bolsillo', coachSub:'Situaciones con prospectos y tu equipo',
+        sugg:['Mi prospecto dice que no tiene tiempo','Un miembro de mi equipo no produce','Cómo invito a alguien escéptico'],
+        focus:'prospectar, motivar equipos y duplicar el negocio' },
+  personal:{ label:'Desarrollo personal', coachTitle:'Coach de bolsillo', coachSub:'Cualquier situación de tu vida',
+        sugg:['Tengo una conversación difícil con mi pareja','Mi jefe no me entiende','Cómo le pongo un límite a un familiar'],
+        focus:'mejorar relaciones y comunicación cotidiana' }
+};
+
+// ══════════════ TOOLS HUB ══════════════
+const TOOLS = {
+  br: [
+    {ic:'🎯',name:'Coach de bolsillo',desc:'Consejo exacto para cualquier situación con un cliente',fn:"openCoach()",full:true},
+    {ic:'🔍',name:'Lee a tu cliente',desc:'Identifica su biotipo y cómo tratarlo',fn:"openAnalyze()"},
+    {ic:'💰',name:'Cierre por tipo de cliente',desc:'Presenta tu propiedad de 4 formas',fn:"openAITool('cierre')"},
+    {ic:'🛡️',name:'Desarma objeciones',desc:'La respuesta correcta según su temperamento',fn:"openAITool('objecion')"},
+    {ic:'⏱️',name:'Seguimiento que no espanta',desc:'Cuándo y cómo contactar a cada cliente',fn:"openAITool('seguimiento')"},
+    {ic:'💼',name:'Conócete como vendedor',desc:'Tus fortalezas y puntos ciegos',fn:"openFullTool()"},
+  ],
+  mlm: [
+    {ic:'🎯',name:'Coach de bolsillo',desc:'Consejo exacto para prospectos y tu equipo',fn:"openCoach()",full:true},
+    {ic:'🔍',name:'Analiza a tu prospecto o equipo',desc:'Descubre su biotipo y cómo desarrollarlo',fn:"openAnalyze()"},
+    {ic:'🚀',name:'Prospecta sin que te rechacen',desc:'Cómo invitar y cerrar según el tipo',fn:"openAITool('prospecta')"},
+    {ic:'🔥',name:'Motiva a cada quien',desc:'El detonante de cada biotipo',fn:"openAITool('motiva')"},
+    {ic:'🔄',name:'Duplica tu sistema',desc:'Enseña según cómo aprende cada integrante del equipo',fn:"openAITool('duplica')"},
+    {ic:'💼',name:'Conócete como líder',desc:'Tu perfil completo de liderazgo',fn:"openFullTool()"},
+  ],
+  personal: [
+    {ic:'🎯',name:'Coach de bolsillo',desc:'Consejo para cualquier situación de tu vida',fn:"openCoach()",full:true},
+    {ic:'🔍',name:'Entiende a quien te saca de quicio',desc:'Analiza a tu pareja, jefe o familiar',fn:"openAnalyze()"},
+    {ic:'💬',name:'Palabras exactas para cada persona',desc:'Qué decir y qué evitar según su tipo',fn:"openAITool('palabras')"},
+    {ic:'❤️',name:'Compatibilidad con cualquiera',desc:'En pareja, amistad y trabajo',fn:"openAITool('compatibilidad')"},
+    {ic:'📅',name:'Reto mensual para crecer',desc:'Un desafío de 7 días para tu biotipo',fn:"openAITool('reto')"},
+    {ic:'✨',name:'Conócete de verdad',desc:'Tu perfil completo en 8 dimensiones',fn:"openFullTool()"},
+  ]
+};
+
+function renderToolsHub(){
+  let tools = (TOOLS[userProfile] || TOOLS.personal).slice();
+  if(userPlan==='equipos'){
+    tools = [{ic:'📊',name:'Dashboard de equipo',desc:'Analiza los biotipos de tu equipo completo',fn:"openDashboard()",full:true}, ...tools];
+  }
+  document.getElementById('tools-sub').textContent = PROFILE_INFO[userProfile].label + ' · aplica tu biotipo a la vida real';
+  document.getElementById('tools-grid').innerHTML = tools.map(t=>
+    `<div class="tool-card ${t.full?'full':''}" onclick="${t.fn}">
+      <div class="tool-ic">${t.ic}</div>
+      <div class="tool-name">${t.name}</div>
+      <div class="tool-desc">${t.desc}</div>
+    </div>`).join('');
+  // Cuentas de pago (no free, no demo) no ven "Desbloquear todo" ni el bloque de compartir/precios
+  const esDemo = currentUser && currentUser.email && currentUser.email.endsWith('@demo.com');
+  const esPago = currentUser && userPlan && userPlan!=='free' && !esDemo;
+  const btnUnlock = document.getElementById('btn-unlock-all');
+  if(btnUnlock) btnUnlock.style.display = esPago ? 'none' : '';
+  const pBadge = document.getElementById('share-premium-badge');
+  if(pBadge) pBadge.style.display = esPago ? 'flex' : 'none';
+}
+
+function currentBiotype(){
+  const sorted=Object.entries(scores).sort((a,b)=>b[1]-a[1]);
+  return sorted[0][0];
+}
+
+// ══════════════ COACH DE BOLSILLO ══════════════
+function openCoach(){
+  const info = PROFILE_INFO[userProfile];
+  document.getElementById('coach-title').textContent = info.coachTitle;
+  document.getElementById('coach-sub').textContent = info.coachSub;
+  document.getElementById('coach-quota').textContent = (userPlan==='free'?'Bloqueado':userPlan==='personal'?(20-coachQuotaUsed)+' consultas':'Ilimitado');
+  // suggestions
+  document.getElementById('coach-sugg').innerHTML = info.sugg.map(s=>`<div class="chat-sugg" onclick="useSugg('${s.replace(/'/g,"\\'")}')">${s}</div>`).join('');
+  // greeting if empty
+  if(coachHistory.length===0){
+    const b = BT[currentBiotype()];
+    document.getElementById('coach-chat').innerHTML =
+      `<div class="chat-msg bot">Hola 👋 Soy tu coach. Sé que tu biotipo es <strong>${b.name}</strong> <span style="color:${b.discColor};">(DISC: ${b.disc})</span>. Cuéntame una situación real y te doy un plan concreto según el temperamento de la persona con la que tratas.</div>`;
+  }
+  goTo('s-coach');
+}
+
+function useSugg(text){
+  document.getElementById('coach-input').value = text;
+  sendCoach();
+}
+
+async function sendCoach(){
+  const input = document.getElementById('coach-input');
+  const text = input.value.trim();
+  if(!text) return;
+
+  // Paywall check
+  if(userPlan==='free'){ goTo('s-pricing'); return; }
+  if(userPlan==='personal' && coachQuotaUsed>=20){
+    alert('Alcanzaste tu límite mensual de 20 consultas. Sube a Profesional para consultas ilimitadas.');
+    goTo('s-pricing'); return;
+  }
+
+  const chat = document.getElementById('coach-chat');
+  chat.innerHTML += `<div class="chat-msg user">${text}</div>`;
+  input.value='';
+  document.getElementById('coach-sugg').style.display='none';
+  const typing = document.createElement('div');
+  typing.className='chat-typing'; typing.textContent='Pensando...';
+  typing.id='coach-typing';
+  chat.appendChild(typing);
+  chat.scrollIntoView(false);
+  window.scrollTo(0,document.body.scrollHeight);
+
+  const bt = BT[currentBiotype()].name;
+  const info = PROFILE_INFO[userProfile];
+
+  const sys = `Eres el Coach de Bolsillo de BioTipo, experto en los 4 biotipos de Hipócrates (sanguíneo, colérico, melancólico, flemático) aplicados a la comunicación, ventas y liderazgo.
+Equivalencia con el modelo DISC: Sanguíneo = I (Influyente), Colérico = D (Dominante), Melancólico = C (Concienzudo), Flemático = S (Estable). Cuando menciones un biotipo, puedes añadir su letra DISC entre paréntesis para que el usuario lo relacione.
+El usuario tiene biotipo ${bt} y su objetivo es ${info.focus}.
+Cuando describa una situación:
+1. Identifica el biotipo de la persona mencionada (si lo menciona o se infiere).
+2. Da consejos concretos y accionables adaptados a ese biotipo y al objetivo del usuario.
+3. Responde en máximo 5 puntos prácticos, directos.
+4. Si falta información clave, haz UNA sola pregunta antes de aconsejar.
+5. Tono directo, profesional y cálido. Sin relleno ni teoría larga.
+Termina siempre con una frase entre comillas lista para usar textualmente.`;
+
+  coachHistory.push({role:'user',content:text});
+
+  try{
+    const res = await fetch('/api/chat',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+         max_tokens:1000, system:sys,
+        messages: coachHistory
+      })
+    });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    let reply = data.content.filter(b=>b.type==='text').map(b=>b.text).join('\n');
+    coachHistory.push({role:'assistant',content:reply});
+    // limpiar markdown -> HTML limpio
+    reply = reply
+      .replace(/^#{1,6}\s*(.+)$/gm,'<strong>$1</strong>')   // ## títulos -> negrita
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')       // **negrita**
+      .replace(/^\s*[-*]\s+(.+)$/gm,'• $1')                  // viñetas
+      .replace(/\n{2,}/g,'<br><br>')                          // párrafos
+      .replace(/\n/g,'<br>');                                 // saltos
+    document.getElementById('coach-typing')?.remove();
+    chat.innerHTML += `<div class="chat-msg bot">${reply}</div>`;
+    if(userPlan==='personal'){ coachQuotaUsed++; document.getElementById('coach-quota').textContent=(20-coachQuotaUsed)+' consultas'; } persistUser();
+  }catch(e){
+    document.getElementById('coach-typing')?.remove();
+    chat.innerHTML += `<div class="chat-msg bot">Tuve un problema de conexión. Intenta de nuevo en un momento.</div>`;
+  }
+  window.scrollTo(0,document.body.scrollHeight);
+}
+
+// ══════════════ ANALIZA A OTRA PERSONA ══════════════
+const ANALYZE_Q = [
+  {q:'¿Cómo reacciona cuando algo sale mal?',o:[['Explota o toma el control de inmediato','colerico'],['Lo minimiza con humor','sanguineo'],['Se queda callado y lo analiza','melancolico'],['Mantiene la calma y busca soluciones','flematico']]},
+  {q:'¿Cómo es al hablar?',o:[['Rápido, fuerte, directo','colerico'],['Expresivo, gesticula, contagia energía','sanguineo'],['Pausado, mide sus palabras','melancolico'],['Tranquilo, escucha más que habla','flematico']]},
+  {q:'¿Qué le importa más al decidir?',o:[['Resultados y rapidez','colerico'],['Que sea divertido y emocionante','sanguineo'],['Que esté bien pensado y sin errores','melancolico'],['Que nadie salga afectado','flematico']]},
+  {q:'¿Cómo es en grupo?',o:[['Toma el mando','colerico'],['Es el centro de atención','sanguineo'],['Observa desde un lado','melancolico'],['Media y mantiene la paz','flematico']]},
+  {q:'¿Qué lo estresa más?',o:[['Perder el control o el tiempo','colerico'],['La rutina y el aburrimiento','sanguineo'],['La improvisación y el desorden','melancolico'],['El conflicto y los cambios bruscos','flematico']]},
+  {q:'¿Cómo trata a los demás?',o:[['Exigente, va al punto','colerico'],['Cálido, muchos amigos','sanguineo'],['Selectivo, pocos pero profundos','melancolico'],['Amable con todos por igual','flematico']]},
+  {q:'¿Cómo maneja su tiempo?',o:[['Todo rápido y ya','colerico'],['Se distrae fácil','sanguineo'],['Planea con detalle','melancolico'],['Constante y sin prisa','flematico']]},
+  {q:'¿Qué lo motiva?',o:[['Ganar y lograr metas','colerico'],['Reconocimiento y diversión','sanguineo'],['Hacer las cosas perfectas','melancolico'],['Estabilidad y armonía','flematico']]},
+];
+let analyzeAnswers=[], analyzePersonName='';
+
+function openAnalyze(){
+  if(userPlan==='free'){ goTo('s-pricing'); return; }
+  if(userPlan==='personal' && analyzeQuotaUsed>=5){
+    alert('Alcanzaste tu límite de 5 análisis. Sube a Profesional para análisis ilimitados.');
+    goTo('s-pricing'); return;
+  }
+  document.getElementById('analyze-title').textContent = TOOLS[userProfile][1].name;
+  document.getElementById('analyze-quota').textContent = (userPlan==='personal'?(5-analyzeQuotaUsed)+' análisis':'Ilimitado');
+  analyzeAnswers=[]; analyzePersonName='';
+  renderAnalyzeForm();
+  goTo('s-analyze');
+}
+
+function renderAnalyzeForm(){
+  const noun = userProfile==='br'?'tu cliente':userProfile==='mlm'?'tu prospecto o miembro de equipo':'la persona';
+  let html = `<label class="af-label">¿A quién quieres analizar? (nombre o apodo)</label>
+    <input class="af-input" id="af-name" placeholder="Ej: ${userProfile==='br'?'Sr. Ramírez':userProfile==='mlm'?'Carlos prospecto':'Mi pareja'}" oninput="analyzePersonName=this.value"/>`;
+  html += `<p style="font-size:12px;color:var(--muted);margin-bottom:16px;">Responde según cómo se comporta ${noun}:</p>`;
+  ANALYZE_Q.forEach((item,i)=>{
+    html += `<div class="af-q"><div class="af-q-text">${i+1}. ${item.q}</div><div class="af-opts">`;
+    item.o.forEach((opt,j)=>{
+      html += `<div class="af-opt" id="af-${i}-${j}" onclick="pickAnalyze(${i},${j},'${opt[1]}')">${opt[0]}</div>`;
+    });
+    html += `</div></div>`;
+  });
+  html += `<button class="btn-primary" style="width:100%;margin-top:8px;" id="af-submit" onclick="runAnalyze()">Generar análisis →</button>`;
+  document.getElementById('analyze-form').innerHTML = html;
+}
+
+function pickAnalyze(qi,oi,bio){
+  document.querySelectorAll(`[id^="af-${qi}-"]`).forEach(e=>e.classList.remove('sel'));
+  document.getElementById(`af-${qi}-${oi}`).classList.add('sel');
+  analyzeAnswers[qi]=bio;
+}
+
+async function runAnalyze(){
+  if(!analyzePersonName){ alert('Escribe el nombre de la persona'); return; }
+  if(analyzeAnswers.filter(Boolean).length<ANALYZE_Q.length){ alert('Responde todas las preguntas'); return; }
+
+  // tally
+  const tally={sanguineo:0,colerico:0,melancolico:0,flematico:0};
+  analyzeAnswers.forEach(b=>tally[b]++);
+  const otherBio = Object.entries(tally).sort((a,b)=>b[1]-a[1])[0][0];
+  const otherName = BT[otherBio].name;
+
+  const form = document.getElementById('analyze-form');
+  form.innerHTML = `<div style="text-align:center;padding:40px 0;"><div class="proc-orb" style="width:80px;height:80px;"></div><p style="color:var(--muted);font-size:13px;margin-top:16px;">Analizando a ${analyzePersonName}...</p></div>`;
+
+  const info = PROFILE_INFO[userProfile];
+  const myBio = BT[currentBiotype()].name;
+  const sys = `Eres experto en biotipos de Hipócrates aplicado a ${info.focus}. El usuario (biotipo ${myBio}) quiere entender a "${analyzePersonName}", cuyo biotipo predominante es ${otherName}. Responde en JSON válido sin markdown:
+{"resumen":"3-4 líneas de cómo es esta persona","si_funciona":["3 cosas que SÍ funcionan al tratarla"],"evitar":["3 cosas que debe EVITAR"],"frases":["3 frases concretas listas para usar con ella"]}`;
+
+  try{
+    const res = await fetch('/api/chat',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({max_tokens:1000,system:sys,
+        messages:[{role:'user',content:`Analiza a ${analyzePersonName}, biotipo ${otherName}, y dime cómo tratarla para ${info.focus}.`}]})
+    });
+    const data = await res.json();
+    if(data.error) throw new Error();
+    const raw = data.content.find(b=>b.type==='text').text.replace(/```json|```/g,'').trim();
+    const r = JSON.parse(raw);
+    renderAnalyzeResult(otherBio, otherName, r);
+    analyzeQuotaUsed++;
+    persistUser();
+  }catch(e){
+    renderAnalyzeResult(otherBio, otherName, {
+      resumen:`${analyzePersonName} muestra un temperamento predominantemente ${otherName.toLowerCase()}. ${BT[otherBio].tagline}`,
+      si_funciona:BT[otherBio].comm.map(c=>c.d).slice(0,3),
+      evitar:['Forzar un ritmo que no es el suyo','Ignorar lo que más valora','Usar un estilo de comunicación opuesto al suyo'],
+      frases:['Entiendo lo que buscas...','Déjame mostrarte algo que te va a interesar...','¿Qué te parece si lo vemos juntos?']
+    });
+    analyzeQuotaUsed++;
+    persistUser();
+  }
+}
+
+function renderAnalyzeResult(bio, name, r){
+  const c = BT[bio].color, soft = BT[bio].soft;
+  let html = `<div style="text-align:center;margin-bottom:20px;">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:var(--muted);margin-bottom:6px;">${analyzePersonName} es probablemente</div>
+    <div style="font-family:'Cormorant Garamond',serif;font-size:44px;color:${c};line-height:1;">${name}</div>
+  </div>`;
+  html += `<div class="dim-card"><div class="dim-text">${r.resumen}</div></div>`;
+  html += `<div class="dim-card"><div class="dim-head"><span class="dim-ic">✅</span><span class="dim-name" style="color:#27ae60;">Qué SÍ funciona</span></div><div class="dim-text">${r.si_funciona.map(x=>'• '+x).join('<br>')}</div></div>`;
+  html += `<div class="dim-card"><div class="dim-head"><span class="dim-ic">⛔</span><span class="dim-name" style="color:#c0392b;">Qué evitar</span></div><div class="dim-text">${r.evitar.map(x=>'• '+x).join('<br>')}</div></div>`;
+  html += `<div class="dim-card" style="border-color:rgba(200,168,75,.3);"><div class="dim-head"><span class="dim-ic">💬</span><span class="dim-name">Frases listas para usar</span></div><div class="dim-text">${r.frases.map(x=>'"'+x+'"').join('<br><br>')}</div></div>`;
+  html += `<button class="btn-primary" style="width:100%;margin-top:8px;" onclick="openAnalyze()">Analizar a otra persona</button>`;
+  html += `<button style="width:100%;padding:13px;margin-top:10px;background:transparent;border:1px solid var(--border);border-radius:50px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;" onclick="goTo('s-results')">← Volver a mis herramientas</button>`;
+  document.getElementById('analyze-form').innerHTML = html;
+  // refrescar contador en pantalla
+  document.getElementById('analyze-quota').textContent = (userPlan==='personal'?Math.max(0,5-analyzeQuotaUsed)+' análisis':'Ilimitado');
+  window.scrollTo(0,0);
+}
+
+// ══════════════ RESULTADO COMPLETO (8 DIMENSIONES) ══════════════
+const DIMENSIONS = [
+  {ic:'❤️',name:'Cómo amas',key:'amor'},
+  {ic:'💼',name:'Cómo trabajas',key:'trabajo'},
+  {ic:'🧭',name:'Cómo decides',key:'decision'},
+  {ic:'💰',name:'Cómo manejas el dinero',key:'dinero'},
+  {ic:'🔥',name:'Cómo reaccionas al estrés',key:'estres'},
+  {ic:'👑',name:'Cómo lideras',key:'liderazgo'},
+  {ic:'💬',name:'Cómo te comunicas',key:'comunicacion'},
+  {ic:'📚',name:'Cómo aprendes',key:'aprendizaje'},
+];
+
+async function openFullTool(){
+  if(userPlan==='free'){ goTo('s-pricing'); return; }
+  goTo('s-fulltool');
+  // Contenido fijo por biotipo — no gasta crédito de IA (es igual para todos)
+  renderFullTool(FULL_FALLBACK[currentBiotype()] || {});
+}
+
+// Contenido de respaldo enriquecido (si la IA no responde)
+const FULL_FALLBACK = {
+  sanguineo:{
+    amor:'Amas con intensidad y entusiasmo. Eres expresivo, romántico y haces sentir especial a tu pareja con gestos espontáneos. Tu reto: la constancia. La pasión inicial es fácil para ti, pero el amor duradero requiere que cultives la atención cuando la novedad se apaga. Practica la presencia diaria, no solo los grandes gestos.',
+    trabajo:'Brillas en ambientes sociales y dinámicos donde puedes interactuar y motivar. Eres el alma del equipo y contagias energía. Tu punto ciego: la dispersión y dejar proyectos a medias. Tu mejor versión aparece cuando tienes un sistema que te ayuda a terminar lo que empiezas. Rodéate de alguien metódico que complemente tu creatividad.',
+    decision:'Decides rápido y desde la emoción y la intuición. Eso te da agilidad, pero a veces te lleva a actuar sin medir consecuencias. Antes de una decisión importante, oblígate a dormir una noche y escribir los pros y contras. Tu instinto suele ser bueno, pero ganará potencia si lo equilibras con datos.',
+    dinero:'Tu relación con el dinero es generosa y a veces impulsiva. Disfrutas gastar, invitar y vivir el momento. El riesgo: falta de previsión y ahorro. Automatiza tus ahorros para que no dependan de tu fuerza de voluntad. Si lo conviertes en un juego o reto social, lo lograrás más fácil.',
+    estres:'Bajo estrés te vuelves disperso, ansioso y buscas escape en lo social. Necesitas hablar y desahogarte para procesar. Tu mejor herramienta es el movimiento físico y conectar con gente que te eleve. Evita aislarte: para ti, el aislamiento agrava la ansiedad en lugar de calmarla.',
+    liderazgo:'Lideras inspirando y motivando. La gente te sigue porque los haces sentir bien y creer en la visión. Tu reto: dar seguimiento y exigir resultados sin perder el cariño. Aprende a tener conversaciones difíciles. Un líder sanguíneo que también sabe ser firme es imparable.',
+    comunicacion:'Eres un comunicador natural: cálido, persuasivo y memorable. Tu don es conectar emocionalmente. Tu trampa: hablar de más y escuchar de menos. Practica el silencio activo. Cuando aprendas a hacer preguntas y callar para escuchar la respuesta, tu carisma se vuelve influencia real.',
+    aprendizaje:'Aprendes mejor de forma interactiva, social y divertida. Los cursos aburridos y solitarios te matan. Busca grupos de estudio, videos dinámicos y aprende enseñando a otros. Tu reto es la profundidad: tiendes a saltar de tema. Comprométete a terminar lo que empiezas antes de pasar a lo siguiente.'
+  },
+  colerico:{
+    amor:'Amas con determinación y lealtad, pero tu intensidad puede sentirse como control. Demuestras amor resolviendo problemas y protegiendo, más que con palabras tiernas. Tu reto: la vulnerabilidad. Tu pareja necesita ver tu lado suave, no solo al líder. Practica preguntar "¿cómo te sientes?" en vez de "¿qué necesitas que resuelva?".',
+    trabajo:'Eres una máquina de resultados: enfocado, decidido y orientado a metas. Lideras de forma natural y no le temes a los retos. Tu punto ciego: atropellar a la gente en tu camino. El talento que más te falta desarrollar es la paciencia y la escucha. Tu productividad ya es alta; tu siguiente nivel es la gente.',
+    decision:'Decides rápido, con seguridad y sin titubear. Es tu mayor fortaleza. El riesgo: decidir sin escuchar otras perspectivas y luego defender el error por orgullo. Antes de cerrar una decisión, pregunta a alguien que piense distinto. No para cambiar de opinión necesariamente, sino para no tener puntos ciegos.',
+    dinero:'Ves el dinero como herramienta de poder y logro. Eres estratégico, inviertes y tomas riesgos calculados. Tu fortaleza es generar; tu reto puede ser disfrutar lo que tienes o ser demasiado agresivo. Equilibra la ambición con momentos de gratitud por lo ya conseguido.',
+    estres:'Bajo estrés te vuelves irritable, autoritario e impaciente. Tiendes a trabajar más duro en vez de parar. Tu trampa es creer que descansar es debilidad. El ejercicio intenso y fijar límites claros te ayudan. Aprende que delegar y soltar el control también es una forma de fuerza.',
+    liderazgo:'Eres un líder nato: decisivo, visionario y exigente. La gente respeta tu claridad y dirección. Tu reto: liderar con empatía, no solo con resultados. Los mejores líderes coléricos aprenden a reconocer, a escuchar y a desarrollar a su gente. Tu equipo dará el doble si siente que te importa, no solo la meta.',
+    comunicacion:'Comunicas directo, claro y al punto. No pierdes el tiempo y eso se agradece. El problema: puedes sonar frío, cortante o arrogante. Suaviza el inicio de tus mensajes con una pregunta genuina. La misma idea dicha con calidez logra mucho más que dicha con dureza.',
+    aprendizaje:'Aprendes haciendo y bajo presión. Los retos te activan. Te impacientas con la teoría larga; quieres la versión práctica y aplicable ya. Busca mentores que vayan al grano y aprende con proyectos reales. Tu reto: no saltarte los fundamentos por las prisas.'
+  },
+  melancolico:{
+    amor:'Amas profundo, leal y selectivo. No te entregas fácil, pero cuando lo haces es total. Valoras la conexión intelectual y emocional genuina. Tu reto: las expectativas altas y el miedo a ser herido. A veces te proteges tanto que no dejas entrar. Permítete ser imperfecto y arriesgar; el amor real no necesita ser perfecto.',
+    trabajo:'Eres el más analítico y meticuloso. Tu trabajo tiene una calidad y profundidad que otros no alcanzan. Brillas en tareas que requieren precisión, creatividad y pensamiento estratégico. Tu punto ciego: el perfeccionismo paralizante y la autocrítica. Aprende que "terminado" vale más que "perfecto". Tu estándar es tu don y tu cárcel.',
+    decision:'Decides con cuidado, analizando todas las variables. Rara vez te equivocas por impulso. El riesgo: la parálisis por análisis. Puedes quedarte tanto tiempo evaluando que pierdes la oportunidad. Ponte plazos para decidir. A veces una decisión buena hoy vale más que la perfecta que nunca llega.',
+    dinero:'Eres prudente, ahorrador y planificas a largo plazo. Tu disciplina financiera es admirable. El riesgo: ser tan cauteloso que no inviertes ni disfrutas. El miedo a perder puede costarte oportunidades de crecer. Permítete calcular riesgos inteligentes, no solo evitarlos todos.',
+    estres:'Bajo estrés te encierras, sobre-analizas y caes en pensamientos negativos. Tiendes a la melancolía y al aislamiento. Tu trampa es rumiar los problemas sin actuar. La escritura, la rutina y el contacto con pocas personas de confianza te ayudan. Cuida el diálogo interno: eres tu crítico más duro.',
+    liderazgo:'Lideras con visión, estándares altos y profundidad estratégica. Piensas lo que otros no ven. Tu reto: comunicar tu visión sin abrumar, y tolerar que otros no sean tan perfeccionistas como tú. Aprende a celebrar el progreso, no solo a señalar lo que falta. Tu equipo necesita tu reconocimiento.',
+    comunicacion:'Comunicas con precisión y profundidad. Tus palabras tienen peso y matices que otros no notan. Tu trampa: sobre-explicar o ser tan cuidadoso que no llegas al punto. También puedes guardarte lo que sientes. Practica decir tu conclusión primero y expresar tus emociones, no solo tus análisis.',
+    aprendizaje:'Eres el mejor aprendiz: profundo, dedicado y autodidacta. Disfrutas dominar un tema a fondo. Aprendes leyendo, investigando y reflexionando en soledad. Tu reto: no quedarte solo en la teoría. Aplica lo que aprendes pronto, aunque sea imperfecto. El conocimiento sin acción se queda incompleto.'
+  },
+  flematico:{
+    amor:'Amas con calma, estabilidad y lealtad inquebrantable. Eres la pareja en quien siempre se puede confiar. Tu presencia es serena y reconfortante. Tu reto: la pasividad y evitar conflictos. A veces callas lo que te molesta hasta que estalla o te alejas. Aprende a expresar tus necesidades; tu pareja no puede leer tu mente.',
+    trabajo:'Eres el ancla del equipo: constante, confiable y diplomático. Mantienes la calma bajo presión y armonizas a la gente. Tu punto ciego: evitar el cambio y postergar decisiones difíciles. Tu zona de confort es cómoda pero puede frenar tu crecimiento. Rétate a tomar la iniciativa antes de que te la pidan.',
+    decision:'Decides con calma y buscas el consenso. Evitas riesgos innecesarios. El riesgo: la indecisión y dejar que otros decidan por ti. Tu prudencia es valiosa, pero a veces "no decidir" ya es una decisión, y no siempre la mejor. Ponte fechas límite y confía más en tu criterio.',
+    dinero:'Eres estable, ahorrador y evitas riesgos. Tu manejo del dinero es responsable y constante. El riesgo: ser tan conservador que dejas pasar oportunidades de crecimiento por miedo o comodidad. Edúcate en inversiones de bajo riesgo. No necesitas ser agresivo, solo un poco más proactivo.',
+    estres:'Bajo estrés te paralizas, te vuelves pasivo y evitas enfrentar lo que te abruma. Tiendes a resistir el cambio aferrándote a la rutina. Tu trampa es la procrastinación disfrazada de calma. Divide los problemas grandes en pasos pequeños. La acción, aunque mínima, rompe tu parálisis.',
+    liderazgo:'Lideras con calma, escucha y diplomacia. Tu equipo se siente seguro y respetado contigo. Eres excelente mediando conflictos. Tu reto: ser más decisivo y asumir el protagonismo. A veces tu humildad te hace invisible. Aprende a tomar postura y a impulsar cambios, no solo a mantener la paz.',
+    comunicacion:'Escuchas más de lo que hablas, y eso es un superpoder: sabes lo que cada quien necesita. Eres diplomático y nadie se siente atacado contigo. Tu trampa: ser tan suave que no dejas claro lo que quieres, o evitar temas incómodos. Practica peticiones directas. La claridad amable es tu siguiente nivel.',
+    aprendizaje:'Aprendes de forma constante, ordenada y sin prisa. Eres paciente y retienes bien. Prefieres un ritmo estable y un ambiente tranquilo. Tu reto: salir de la pasividad y buscar activamente nuevos retos. No esperes a que el aprendizaje llegue a ti; tu crecimiento se acelera cuando tomas la iniciativa.'
+  }
+};
+
+function renderFullTool(r){
+  const bt = BT[currentBiotype()];
+  let html = `<div style="text-align:center;margin-bottom:18px;"><div style="font-family:'Cormorant Garamond',serif;font-size:40px;color:${bt.color};">${bt.name}</div><div style="font-size:12px;color:var(--muted);font-style:italic;">${bt.tagline}</div></div>`;
+  DIMENSIONS.forEach(d=>{
+    html += `<div class="dim-card"><div class="dim-head"><span class="dim-ic">${d.ic}</span><span class="dim-name">${d.name}</span></div><div class="dim-text">${r[d.key]||''}</div></div>`;
+  });
+  html += `<button style="width:100%;padding:13px;margin-top:8px;background:transparent;border:1px solid var(--border);border-radius:50px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;" onclick="goTo('s-results')">← Volver a mis herramientas</button>`;
+  document.getElementById('fulltool-body').innerHTML = html;
+  window.scrollTo(0,0);
+}
+
+
+// ══════════════ HERRAMIENTAS IA GENÉRICAS ══════════════
+// Configuración de cada herramienta: título, qué pide al usuario, y cómo arma el prompt
+// ═══ BANCO DE 48 RETOS MENSUALES (12 por biotipo) — sin IA ═══
+const RETOS_MES = {
+  sanguineo: [
+    {titulo:'Termina lo que empiezas', objetivo:'Tu reto este mes es la constancia. Elige UN proyecto y complétalo antes de iniciar otro.', dias:['Día 1: Escribe el proyecto que vas a terminar este mes','Día 2: Divídelo en 5 pasos concretos','Día 3: Completa el paso 1 sin distraerte','Día 4: Completa el paso 2','Día 5: Completa el paso 3','Día 6: Completa el paso 4','Día 7: Termina el paso 5 y celebra haberlo cerrado']},
+    {titulo:'Escucha antes de hablar', objetivo:'Desarrolla la escucha activa. Haz preguntas antes de dar tu opinión.', dias:['Día 1: En cada conversación, haz 1 pregunta antes de opinar','Día 2: Repite lo que entendiste antes de responder','Día 3: Deja 3 segundos de silencio antes de hablar','Día 4: Pregunta "¿cómo te sientes?" a alguien','Día 5: Escucha una queja sin defenderte','Día 6: Pide feedback sobre cómo escuchas','Día 7: Reflexiona qué aprendiste escuchando']},
+    {titulo:'Disciplina financiera', objetivo:'Domina tus impulsos de gasto. Crea el hábito del ahorro automático.', dias:['Día 1: Revisa tus gastos del último mes','Día 2: Identifica 3 gastos impulsivos','Día 3: Automatiza un ahorro pequeño','Día 4: Pasa un día sin compras innecesarias','Día 5: Cocina en casa en vez de salir','Día 6: Calcula cuánto ahorraste','Día 7: Define tu meta de ahorro mensual']},
+    {titulo:'Profundiza en un tema', objetivo:'Combate la dispersión. Domina un solo tema a fondo.', dias:['Día 1: Elige UN tema que quieras dominar','Día 2: Lee o estudia 30 min sin distracción','Día 3: Toma notas de lo aprendido','Día 4: Enséñaselo a alguien','Día 5: Profundiza en lo que no entendiste','Día 6: Aplica lo aprendido en algo real','Día 7: Resume todo en una página']},
+    {titulo:'Cumple tus promesas', objetivo:'Construye confiabilidad. Que tu palabra valga oro.', dias:['Día 1: Anota cada promesa que hagas hoy','Día 2: Cumple todas las de ayer','Día 3: No prometas nada que no puedas cumplir','Día 4: Llega puntual a todo','Día 5: Cumple un compromiso pendiente viejo','Día 6: Pregunta a alguien si te considera confiable','Día 7: Reflexiona sobre tu nivel de cumplimiento']},
+    {titulo:'Presencia diaria en el amor', objetivo:'El amor duradero requiere atención constante, no solo gestos.', dias:['Día 1: Dedica 15 min de atención plena a un ser querido','Día 2: Pregunta cómo estuvo su día y escucha','Día 3: Haz un gesto pequeño pero significativo','Día 4: Apaga el teléfono durante una conversación','Día 5: Recuerda y menciona algo que te dijeron','Día 6: Expresa agradecimiento específico','Día 7: Planea algo pensando en el otro, no en ti']},
+    {titulo:'Enfoque sin distracciones', objetivo:'Entrena tu capacidad de concentración profunda.', dias:['Día 1: Trabaja 25 min sin revisar el teléfono','Día 2: Haz 2 bloques de 25 min enfocado','Día 3: Silencia notificaciones por 2 horas','Día 4: Termina una tarea antes de abrir otra','Día 5: Trabaja en un lugar sin distracciones','Día 6: Haz 3 bloques de enfoque','Día 7: Reflexiona cuánto más lograste']},
+    {titulo:'Sé firme con cariño', objetivo:'Aprende a decir "no" y a exigir sin perder tu calidez.', dias:['Día 1: Di "no" a algo que no quieres hacer','Día 2: Da feedback honesto a alguien','Día 3: Pon un límite claro y amable','Día 4: Exige un resultado sin disculparte','Día 5: Ten una conversación difícil pendiente','Día 6: Defiende tu opinión sin ceder por agradar','Día 7: Reflexiona cómo se siente ser firme']},
+    {titulo:'Orden en tu espacio', objetivo:'Un espacio ordenado refleja una mente enfocada.', dias:['Día 1: Ordena tu escritorio','Día 2: Organiza tus archivos digitales','Día 3: Limpia un cajón o área caótica','Día 4: Crea un sistema para tus pendientes','Día 5: Mantén tu espacio ordenado todo el día','Día 6: Tira o regala lo que no usas','Día 7: Disfruta tu espacio ordenado']},
+    {titulo:'Seguimiento real', objetivo:'No basta con conectar; aprende a dar seguimiento.', dias:['Día 1: Haz una lista de contactos pendientes','Día 2: Da seguimiento a 1 persona','Día 3: Da seguimiento a otra','Día 4: Agenda recordatorios de seguimiento','Día 5: Retoma una relación que descuidaste','Día 6: Cierra un pendiente que dejaste abierto','Día 7: Crea tu sistema de seguimiento']},
+    {titulo:'Pausa antes de reaccionar', objetivo:'Controla la impulsividad emocional.', dias:['Día 1: Cuenta hasta 5 antes de responder molesto','Día 2: Escribe lo que sientes antes de decirlo','Día 3: Pospón una decisión impulsiva 24 horas','Día 4: Respira hondo en un momento de tensión','Día 5: Evita enviar un mensaje en caliente','Día 6: Reflexiona antes de prometer algo','Día 7: Nota cómo cambió tu semana con pausa']},
+    {titulo:'Constancia en un hábito', objetivo:'Demuéstrate que puedes sostener algo 7 días seguidos.', dias:['Día 1: Elige un hábito pequeño (ej: 10 min de ejercicio)','Día 2: Repítelo','Día 3: Repítelo aunque no tengas ganas','Día 4: Repítelo','Día 5: Repítelo','Día 6: Repítelo','Día 7: Celebra tu racha de 7 días']}
+  ],
+  colerico: [
+    {titulo:'Vulnerabilidad', objetivo:'Muestra tu lado humano. La gente sigue a líderes que también sienten.', dias:['Día 1: Comparte un miedo o duda con alguien cercano','Día 2: Pide ayuda en algo','Día 3: Admite un error públicamente','Día 4: Pregunta "¿cómo te sientes?" y escucha','Día 5: Agradece a alguien con sinceridad','Día 6: Reconoce el mérito de otro','Día 7: Reflexiona cómo se sintió ser vulnerable']},
+    {titulo:'Paciencia con la gente', objetivo:'Tu velocidad atropella. Aprende el ritmo de los demás.', dias:['Día 1: Deja que alguien termine de hablar sin interrumpir','Día 2: Explica algo dos veces sin frustrarte','Día 3: Pregunta en vez de ordenar','Día 4: Da espacio para que otros decidan','Día 5: Espera sin presionar un resultado','Día 6: Felicita el progreso, no solo el resultado','Día 7: Reflexiona sobre tu paciencia']},
+    {titulo:'Escucha de verdad', objetivo:'Lidera escuchando, no solo dirigiendo.', dias:['Día 1: En cada reunión, escucha más de lo que hablas','Día 2: Pregunta la opinión de alguien callado','Día 3: No interrumpas en todo el día','Día 4: Repite lo que entendiste antes de actuar','Día 5: Pide feedback sobre tu liderazgo','Día 6: Cambia una decisión por algo que escuchaste','Día 7: Reflexiona qué aprendiste escuchando']},
+    {titulo:'Delega y confía', objetivo:'No tienes que hacerlo todo. Forma a otros.', dias:['Día 1: Identifica una tarea que puedas delegar','Día 2: Delégala con instrucciones claras','Día 3: No la supervises cada hora','Día 4: Deja que la persona lo haga a su manera','Día 5: Da feedback constructivo, no crítica','Día 6: Reconoce el trabajo hecho','Día 7: Reflexiona sobre soltar el control']},
+    {titulo:'Descanso sin culpa', objetivo:'Tu cuerpo no es una máquina. Recargar es estratégico.', dias:['Día 1: Toma 1 hora libre sin trabajar','Día 2: Duerme 8 horas','Día 3: Haz algo solo por placer','Día 4: Desconéctate del trabajo una tarde','Día 5: Camina sin objetivo productivo','Día 6: Pasa tiempo con alguien sin agenda','Día 7: Reflexiona cómo te sientes descansado']},
+    {titulo:'Reconoce a los demás', objetivo:'Un líder que reconoce, multiplica la lealtad.', dias:['Día 1: Agradece a alguien específicamente','Día 2: Reconoce públicamente un buen trabajo','Día 3: Escribe un mensaje de aprecio','Día 4: Celebra el logro de un miembro del equipo','Día 5: Da crédito por una idea ajena','Día 6: Felicita a alguien por su esfuerzo','Día 7: Reflexiona sobre el poder del reconocimiento']},
+    {titulo:'Suaviza tu comunicación', objetivo:'Lo que dices es correcto; cómo lo dices, importa.', dias:['Día 1: Empieza una crítica con algo positivo','Día 2: Cambia una orden por una petición','Día 3: Sonríe antes de hablar de negocios','Día 4: Pregunta antes de afirmar','Día 5: Usa "podríamos" en vez de "tienes que"','Día 6: Da una mala noticia con empatía','Día 7: Reflexiona sobre tu tono']},
+    {titulo:'Conexión emocional', objetivo:'Las relaciones no se resuelven, se cultivan.', dias:['Día 1: Pregunta a tu pareja/amigo cómo se siente, sin resolver','Día 2: Solo escucha, no des soluciones','Día 3: Expresa un sentimiento propio','Día 4: Da un abrazo o gesto de cariño','Día 5: Dedica tiempo sin agenda','Día 6: Recuerda algo importante para el otro','Día 7: Reflexiona sobre conectar sin controlar']},
+    {titulo:'Acepta otras formas', objetivo:'Tu manera no es la única manera correcta.', dias:['Día 1: Deja que alguien haga algo a su modo','Día 2: Prueba una idea que no era tuya','Día 3: Pregunta "¿cómo lo harías tú?"','Día 4: Acepta una crítica sin defenderte','Día 5: Cambia de opinión ante un buen argumento','Día 6: Reconoce que alguien tenía razón','Día 7: Reflexiona sobre la flexibilidad']},
+    {titulo:'Celebra el proceso', objetivo:'No todo es el resultado final. Disfruta el camino.', dias:['Día 1: Reconoce un avance pequeño','Día 2: Celebra un esfuerzo, no solo un logro','Día 3: Agradece dónde estás hoy','Día 4: Disfruta una tarea sin pensar en el final','Día 5: Felicita un progreso ajeno','Día 6: Anota 3 cosas que salieron bien','Día 7: Reflexiona sobre disfrutar el proceso']},
+    {titulo:'Empatía activa', objetivo:'Ponte en los zapatos del otro antes de juzgar.', dias:['Día 1: Antes de criticar, imagina su situación','Día 2: Pregunta por qué alguien actúa así','Día 3: Da el beneficio de la duda','Día 4: Ofrece ayuda sin que te la pidan','Día 5: Escucha un problema sin minimizarlo','Día 6: Valida el sentimiento de alguien','Día 7: Reflexiona sobre la empatía']},
+    {titulo:'Cede el control', objetivo:'Aprende a confiar en el proceso y en los demás.', dias:['Día 1: Deja una decisión en manos de otro','Día 2: No revises algo que delegaste','Día 3: Acepta un resultado imperfecto','Día 4: Permite que alguien lidere','Día 5: Suelta una preocupación que no controlas','Día 6: Confía sin verificar','Día 7: Reflexiona cómo se siente soltar']}
+  ],
+  melancolico: [
+    {titulo:'Acción sobre análisis', objetivo:'Deja de sobre-pensar. Actúa con información incompleta.', dias:['Día 1: Toma una decisión pequeña en 1 minuto','Día 2: Haz algo sin planearlo perfecto','Día 3: Publica/entrega algo aunque no sea perfecto','Día 4: Di "sí" a algo sin analizarlo todo','Día 5: Actúa antes de tener todas las respuestas','Día 6: Acepta que "suficientemente bueno" basta','Día 7: Reflexiona cuánto lograste actuando']},
+    {titulo:'Suelta el perfeccionismo', objetivo:'Lo perfecto es enemigo de lo terminado.', dias:['Día 1: Entrega algo al 80% sin retocarlo','Día 2: Comete un error a propósito y déjalo','Día 3: No revises un trabajo más de 2 veces','Día 4: Acepta un cumplido sin minimizarlo','Día 5: Termina algo en la mitad del tiempo','Día 6: Comparte algo imperfecto','Día 7: Reflexiona sobre soltar el control']},
+    {titulo:'Enfócate en lo positivo', objetivo:'Entrena tu mente para ver oportunidades, no solo riesgos.', dias:['Día 1: Anota 3 cosas buenas del día','Día 2: Por cada preocupación, escribe una solución','Día 3: Reconoce un logro tuyo','Día 4: Agradece algo en voz alta','Día 5: Reformula un pensamiento negativo','Día 6: Celebra algo pequeño','Día 7: Lee tu lista de cosas positivas']},
+    {titulo:'Conexión social', objetivo:'Sal de tu mundo interior. Las relaciones nutren.', dias:['Día 1: Inicia una conversación con alguien','Día 2: Llama a un amigo','Día 3: Acepta una invitación social','Día 4: Comparte algo personal con alguien','Día 5: Pide ayuda en vez de hacerlo solo','Día 6: Pasa tiempo con gente','Día 7: Reflexiona cómo te sentiste conectando']},
+    {titulo:'Expresa lo que sientes', objetivo:'No guardes todo dentro. Comunica tus emociones.', dias:['Día 1: Dile a alguien cómo te sientes','Día 2: Expresa un desacuerdo en vez de callar','Día 3: Comparte una preocupación','Día 4: Pide lo que necesitas','Día 5: Di "no" a algo que no quieres','Día 6: Expresa agradecimiento','Día 7: Reflexiona sobre abrirte']},
+    {titulo:'Decisiones rápidas', objetivo:'Entrena el músculo de decidir sin parálisis.', dias:['Día 1: Elige qué comer en 10 segundos','Día 2: Toma 3 decisiones pequeñas rápido','Día 3: Decide algo sin pedir opiniones','Día 4: Confía en tu primer instinto','Día 5: Pon un límite de tiempo para decidir','Día 6: Decide y no te arrepientas','Día 7: Reflexiona sobre decidir ágil']},
+    {titulo:'Autocompasión', objetivo:'Trátate con la amabilidad que das a otros.', dias:['Día 1: Háblate como a un buen amigo','Día 2: Perdónate un error pasado','Día 3: Reconoce algo que haces bien','Día 4: Descansa sin sentir culpa','Día 5: Acepta que no tienes que ser perfecto','Día 6: Celebra quién eres hoy','Día 7: Reflexiona sobre ser amable contigo']},
+    {titulo:'Comparte tu creatividad', objetivo:'Tu mundo interior es valioso. Muéstralo.', dias:['Día 1: Comparte una idea que tenías guardada','Día 2: Muestra algo que creaste','Día 3: Propón una solución creativa','Día 4: Escribe o crea algo y compártelo','Día 5: Da tu opinión en un grupo','Día 6: Colabora en algo creativo','Día 7: Reflexiona sobre exponerte']},
+    {titulo:'Vive el presente', objetivo:'Deja de rumiar el pasado o temer el futuro.', dias:['Día 1: Haz una actividad con atención plena','Día 2: Come sin distracciones, saboreando','Día 3: Camina notando lo que te rodea','Día 4: Deja el teléfono una hora','Día 5: Disfruta un momento sin analizarlo','Día 6: Respira hondo 5 veces conscientemente','Día 7: Reflexiona sobre estar presente']},
+    {titulo:'Pide y recibe ayuda', objetivo:'No tienes que cargar todo solo.', dias:['Día 1: Pide ayuda en una tarea','Día 2: Acepta una mano que te ofrezcan','Día 3: Delega algo','Día 4: Comparte una carga con alguien','Día 5: Di "no puedo solo con esto"','Día 6: Agradece la ayuda recibida','Día 7: Reflexiona sobre apoyarte en otros']},
+    {titulo:'Celebra tus logros', objetivo:'Reconoce lo que has avanzado, no solo lo que falta.', dias:['Día 1: Lista 5 logros tuyos','Día 2: Comparte un logro con alguien','Día 3: Date un premio por algo logrado','Día 4: Acepta una felicitación sin minimizar','Día 5: Reconoce tu progreso del año','Día 6: Agradece tus capacidades','Día 7: Reflexiona sobre valorarte']},
+    {titulo:'Flexibilidad ante el cambio', objetivo:'No todo sale según el plan, y está bien.', dias:['Día 1: Cambia un plan sin estresarte','Día 2: Improvisa algo','Día 3: Acepta un imprevisto con calma','Día 4: Prueba algo nuevo sin planearlo','Día 5: Suelta el control de una situación','Día 6: Adáptate a un cambio de último momento','Día 7: Reflexiona sobre fluir con el cambio']}
+  ],
+  flematico: [
+    {titulo:'Toma la iniciativa', objetivo:'Deja de esperar. Da el primer paso esta semana.', dias:['Día 1: Inicia una conversación que has pospuesto','Día 2: Propón una idea sin que te la pidan','Día 3: Toma una decisión sin consultar','Día 4: Empieza un proyecto pendiente','Día 5: Ofrécete como voluntario para algo','Día 6: Da el primer paso en una relación','Día 7: Reflexiona sobre tomar la iniciativa']},
+    {titulo:'Sal de tu zona de confort', objetivo:'El crecimiento está fuera de lo cómodo.', dias:['Día 1: Haz algo que normalmente evitas','Día 2: Habla con un desconocido','Día 3: Prueba una actividad nueva','Día 4: Di tu opinión aunque incomode','Día 5: Toma un pequeño riesgo','Día 6: Acepta un reto que te asusta','Día 7: Reflexiona sobre tu crecimiento']},
+    {titulo:'Expresa tu opinión', objetivo:'Tu voz importa. Deja de quedarte callado.', dias:['Día 1: Da tu opinión en una conversación','Día 2: Discrepa con algo respetuosamente','Día 3: Defiende tu punto de vista','Día 4: Propón una alternativa','Día 5: Di lo que realmente piensas','Día 6: Comparte una idea en grupo','Día 7: Reflexiona sobre alzar tu voz']},
+    {titulo:'Pon metas ambiciosas', objetivo:'No te conformes con lo cómodo. Aspira a más.', dias:['Día 1: Escribe una meta que te emocione','Día 2: Divídela en pasos','Día 3: Da el primer paso hoy','Día 4: Cuéntale tu meta a alguien','Día 5: Avanza un paso más','Día 6: Visualiza lograrla','Día 7: Reflexiona sobre aspirar a más']},
+    {titulo:'Energía y movimiento', objetivo:'Activa tu cuerpo para activar tu motivación.', dias:['Día 1: Camina 20 minutos','Día 2: Haz ejercicio ligero','Día 3: Levántate temprano y muévete','Día 4: Haz una tarea física pendiente','Día 5: Mantente activo todo el día','Día 6: Prueba una actividad enérgica','Día 7: Reflexiona cómo la energía te impulsa']},
+    {titulo:'Enfrenta el conflicto', objetivo:'Evitar no resuelve. Aborda lo que incomoda.', dias:['Día 1: Identifica un conflicto que evitas','Día 2: Prepara qué quieres decir','Día 3: Ten la conversación difícil','Día 4: Expresa tu desacuerdo','Día 5: Resuelve un malentendido','Día 6: Pon un límite que pospusiste','Día 7: Reflexiona sobre enfrentar conflictos']},
+    {titulo:'Decide con seguridad', objetivo:'Confía en ti. Decide sin tanta consulta.', dias:['Día 1: Toma una decisión solo','Día 2: Confía en tu criterio','Día 3: Decide rápido algo pequeño','Día 4: No pidas permiso para algo que puedes decidir','Día 5: Mantén una decisión sin dudar','Día 6: Actúa según tu decisión','Día 7: Reflexiona sobre tu seguridad']},
+    {titulo:'Muestra entusiasmo', objetivo:'Tu calma es fortaleza, pero el entusiasmo contagia.', dias:['Día 1: Expresa emoción por algo','Día 2: Comparte algo que te apasiona','Día 3: Celebra un logro con energía','Día 4: Anima a alguien activamente','Día 5: Pon energía en una tarea','Día 6: Sonríe y muestra interés','Día 7: Reflexiona sobre mostrar entusiasmo']},
+    {titulo:'Acelera tu ritmo', objetivo:'A veces la velocidad importa. Practica la urgencia sana.', dias:['Día 1: Termina una tarea antes de tu tiempo usual','Día 2: Responde mensajes el mismo día','Día 3: Toma una decisión sin posponerla','Día 4: Haz algo de inmediato en vez de "luego"','Día 5: Ponte un reto de tiempo','Día 6: Adelanta algo pendiente','Día 7: Reflexiona sobre tu ritmo']},
+    {titulo:'Lidera un momento', objetivo:'Tienes la calma que un líder necesita. Úsala.', dias:['Día 1: Toma la batuta en una situación','Día 2: Organiza algo pequeño','Día 3: Guía a alguien que lo necesita','Día 4: Propón el plan de un grupo','Día 5: Toma una decisión por el equipo','Día 6: Resuelve un problema liderando','Día 7: Reflexiona sobre tu liderazgo']},
+    {titulo:'Persigue lo que quieres', objetivo:'Identifica un deseo y ve por él activamente.', dias:['Día 1: Escribe algo que realmente quieres','Día 2: Da un paso concreto hacia eso','Día 3: Pide algo que necesitas para lograrlo','Día 4: Avanza aunque sea incómodo','Día 5: No te conformes con menos','Día 6: Insiste en lo que quieres','Día 7: Reflexiona sobre ir por tus deseos']},
+    {titulo:'Construye un hábito activo', objetivo:'Crea rutina de acción, no de espera.', dias:['Día 1: Elige un hábito proactivo','Día 2: Hazlo apenas despiertes','Día 3: Repítelo sin posponerlo','Día 4: Mantenlo aunque cueste','Día 5: Hazlo con energía','Día 6: No rompas la racha','Día 7: Celebra tu nuevo hábito activo']}
+  ]
+};
+
+const AI_TOOLS = {
+  // ---- BIENES RAÍCES ----
+  cierre: {
+    title:'Cierre por tipo de cliente', icon:'💰',
+    ask:'¿Qué propiedad o producto vas a presentar?',
+    placeholder:'Ej: Departamento de 2 recámaras en zona norte, $2.5M',
+    sys:(bt,extra)=>`Eres experto en ventas inmobiliarias y biotipos de Hipócrates. El asesor (biotipo ${bt}) va a presentar: "${extra}". Genera CÓMO presentar esa misma propiedad de 4 formas distintas, una por cada biotipo de cliente (Sanguíneo, Colérico, Melancólico, Flemático). Responde en JSON sin markdown: {"sanguineo":"cómo presentarla a un cliente sanguíneo, 2-3 oraciones con enfoque y frase ejemplo","colerico":"...","melancolico":"...","flematico":"..."}`,
+    render:'biotipos4'
+  },
+  objecion: {
+    title:'Desarma objeciones', icon:'🛡️',
+    ask:'¿Qué objeción te puso el cliente?',
+    placeholder:'Ej: "Está muy caro" o "Lo voy a pensar"',
+    sys:(bt,extra)=>`Eres experto en cierre de ventas inmobiliarias y biotipos de Hipócrates. El cliente puso esta objeción: "${extra}". Genera la mejor respuesta para desarmarla según cada biotipo de cliente. Responde en JSON sin markdown: {"sanguineo":"respuesta para cliente sanguíneo, con la frase exacta a decir","colerico":"...","melancolico":"...","flematico":"..."}`,
+    render:'biotipos4'
+  },
+  seguimiento: {
+    title:'Seguimiento que no espanta', icon:'⏱️',
+    ask:'¿En qué punto está tu cliente?',
+    placeholder:'Ej: Le mostré la casa hace 3 días y no responde',
+    sys:(bt,extra)=>`Eres experto en seguimiento de ventas inmobiliarias y biotipos. Situación: "${extra}". Genera la estrategia de seguimiento ideal (cuándo contactar, por qué medio, qué decir) según cada biotipo de cliente. Responde en JSON sin markdown: {"sanguineo":"estrategia de seguimiento para sanguíneo","colerico":"...","melancolico":"...","flematico":"..."}`,
+    render:'biotipos4'
+  },
+  // ---- MLM ----
+  prospecta: {
+    title:'Prospecta sin que te rechacen', icon:'🚀',
+    ask:'¿A quién quieres invitar y qué sabes de esa persona?',
+    placeholder:'Ej: Un compañero de trabajo, serio y analítico, busca ingreso extra',
+    sys:(bt,extra)=>`Eres experto en network marketing y biotipos de Hipócrates. El líder (biotipo ${bt}) quiere prospectar a: "${extra}". Detecta el biotipo probable de esa persona y genera: cómo invitarla, cómo presentarle el plan y cómo cerrar, todo según su temperamento. Responde en JSON sin markdown: {"biotipo_detectado":"nombre del biotipo","invitar":"cómo invitar, con frase exacta","presentar":"cómo presentar el plan","cerrar":"cómo cerrar, con frase exacta"}`,
+    render:'prospecta'
+  },
+  motiva: {
+    title:'Motiva a cada quien', icon:'🔥',
+    ask:'¿A quién de tu equipo quieres motivar?',
+    placeholder:'Ej: María, lleva 2 meses sin moverse, es tranquila y evita el rechazo',
+    sys:(bt,extra)=>`Eres experto en liderazgo de equipos MLM y biotipos. Situación del miembro: "${extra}". Detecta su biotipo y genera cómo motivarlo según lo que mueve a ese temperamento. Responde en JSON sin markdown: {"biotipo_detectado":"nombre","detonante":"qué lo motiva en el fondo","como_motivar":"3 acciones concretas para motivarlo","que_evitar":"qué NO hacer con este temperamento","frase":"una frase motivadora ideal para decirle"}`,
+    render:'motiva'
+  },
+  duplica: {
+    title:'Duplica tu sistema', icon:'🔄',
+    ask:'¿A quién vas a enseñar y cómo es?',
+    placeholder:'Ej: Nuevo distribuidor, entusiasta pero desordenado',
+    sys:(bt,extra)=>`Eres experto en duplicación de sistemas MLM y biotipos. Persona a enseñar: "${extra}". Detecta su biotipo y genera cómo enseñarle el sistema según cómo aprende ese temperamento. Responde en JSON sin markdown: {"biotipo_detectado":"nombre","como_aprende":"cómo aprende este biotipo","como_ensenar":"3 pasos para enseñarle el sistema a su medida","ritmo":"a qué ritmo y con qué seguimiento","clave":"la clave para que duplique"}`,
+    render:'duplica'
+  },
+  // ---- PERSONAL ----
+  palabras: {
+    title:'Palabras exactas para cada persona', icon:'💬',
+    ask:'¿Con quién necesitas comunicarte y sobre qué?',
+    placeholder:'Ej: Decirle a mi jefe que necesito más tiempo, es directo e impaciente',
+    sys:(bt,extra)=>`Eres experto en comunicación y biotipos de Hipócrates. El usuario (biotipo ${bt}) necesita: "${extra}". Detecta el biotipo de la otra persona y genera qué decir y qué evitar. Responde en JSON sin markdown: {"biotipo_detectado":"nombre","que_decir":"3 cosas que SÍ funcionan al hablarle","que_evitar":"3 cosas que NO debe decir","frase":"la frase exacta para empezar la conversación"}`,
+    render:'palabras'
+  },
+  compatibilidad: {
+    title:'Compatibilidad con cualquiera', icon:'❤️',
+    ask:'¿Con quién quieres ver tu compatibilidad?',
+    placeholder:'Ej: Mi pareja, es muy sociable y espontánea',
+    sys:(bt,extra)=>`Eres experto en relaciones y biotipos de Hipócrates. El usuario (biotipo ${bt}) quiere ver su compatibilidad con: "${extra}". Detecta el biotipo de la otra persona y analiza la dinámica entre ambos. Responde en JSON sin markdown: {"biotipo_detectado":"nombre","quimica":"cómo es la química entre ${bt} y este biotipo, 2-3 oraciones","fortalezas":"qué hace fuerte a esta relación","fricciones":"dónde van a chocar","consejo":"el consejo clave para que funcione"}`,
+    render:'compatibilidad'
+  },
+  reto: {
+    title:'Reto mensual para crecer', icon:'📅',
+    ask:null, // no pide input, genera directo
+    placeholder:'',
+    sys:(bt,extra)=>`Eres un coach de desarrollo personal experto en biotipos de Hipócrates. Genera un reto de 7 días personalizado para una persona de biotipo ${bt}, diseñado para trabajar su mayor punto ciego y potenciar su fortaleza. Responde en JSON sin markdown: {"titulo":"nombre del reto","objetivo":"qué busca lograr este reto para un ${bt}","dias":["Día 1: acción concreta","Día 2: ...","Día 3: ...","Día 4: ...","Día 5: ...","Día 6: ...","Día 7: ..."]}`,
+    render:'reto'
+  }
+};
+
+let currentAITool=null;
+
+function openAITool(key){
+  if(userPlan==='free'){ goTo('s-pricing'); return; }
+  const t = AI_TOOLS[key];
+  if(!t) return;
+  currentAITool=key;
+  document.getElementById('ait-title').textContent = t.title;
+  document.getElementById('ait-sub').textContent = PROFILE_INFO[userProfile].label;
+  document.getElementById('ait-quota').style.display='none';
+  const body = document.getElementById('ait-body');
+
+  // Reto mensual: contenido fijo según el mes, sin IA
+  if(key==='reto'){
+    const bio = currentBiotype();
+    const retos = RETOS_MES[bio] || RETOS_MES.sanguineo;
+    const mes = new Date().getMonth(); // 0-11
+    const reto = retos[mes % retos.length];
+    const meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    document.getElementById('ait-sub').textContent = `Reto de ${meses[mes]} · ${BT[bio].name}`;
+    renderAITool('reto', reto);
+    goTo('s-aitool');
+    return;
+  }
+
+  if(t.ask){
+    body.innerHTML = `<div class="analyze-form">
+      <label class="af-label">${t.ask}</label>
+      <textarea class="af-input" id="ait-input" rows="3" placeholder="${t.placeholder}" style="resize:none;"></textarea>
+      <button class="btn-primary" style="width:100%;" onclick="runAITool()">Generar ✨</button>
+    </div>`;
+  }else{
+    // sin input, genera directo
+    body.innerHTML = `<div style="text-align:center;padding:20px 0;"><button class="btn-primary" onclick="runAITool()">Generar ✨</button></div>`;
+  }
+  goTo('s-aitool');
+}
+
+async function runAITool(){
+  const t = AI_TOOLS[currentAITool];
+  const inputEl = document.getElementById('ait-input');
+  const extra = inputEl ? inputEl.value.trim() : '';
+  if(t.ask && !extra){ alert('Completa el campo para generar'); return; }
+
+  const body = document.getElementById('ait-body');
+  body.innerHTML = `<div style="text-align:center;padding:40px 0;"><div class="proc-orb" style="width:70px;height:70px;"></div><p style="color:var(--muted);font-size:13px;margin-top:14px;">Generando...</p></div>`;
+
+  const bt = BT[currentBiotype()].name;
+  try{
+    const res = await fetch('/api/chat',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({max_tokens:1500,system:t.sys(bt,extra),
+        messages:[{role:'user',content:t.ask?`Genera la herramienta para: ${extra}`:`Genera mi reto de 7 días para biotipo ${bt}.`}]})
+    });
+    const data = await res.json();
+    if(data.error) throw new Error();
+    const raw = data.content.find(b=>b.type==='text').text.replace(/```json|```/g,'').trim();
+    renderAITool(t.render, JSON.parse(raw));
+    if(userPlan==='personal'){ coachQuotaUsed++; persistUser(); }
+  }catch(e){
+    body.innerHTML = `<div class="dim-card"><div class="dim-text">No se pudo conectar con la IA en este momento. Esta función requiere conexión a internet y funciona cuando la app está publicada. Intenta de nuevo.</div></div>
+    <button class="btn-primary" style="width:100%;margin-top:10px;" onclick="openAITool('${currentAITool}')">Reintentar</button>`;
+  }
+}
+
+function renderAITool(type, r){
+  const body = document.getElementById('ait-body');
+  const card=(ic,name,txt,col)=>`<div class="dim-card"><div class="dim-head"><span class="dim-ic">${ic}</span><span class="dim-name" ${col?`style="color:${col}"`:''}>${name}</span></div><div class="dim-text">${txt}</div></div>`;
+  const bcard=(bio,txt)=>`<div class="dim-card" style="border-left:3px solid ${BT[bio].color};"><div class="dim-head"><span class="dim-name" style="color:${BT[bio].color}">${BT[bio].name}</span></div><div class="dim-text">${txt}</div></div>`;
+  let html='';
+
+  if(type==='biotipos4'){
+    html = `<p style="font-size:12px;color:var(--muted);margin-bottom:14px;">Estrategia para cada tipo de cliente:</p>`;
+    ['sanguineo','colerico','melancolico','flematico'].forEach(b=>{ html += bcard(b, r[b]||''); });
+  } else if(type==='prospecta'){
+    const bd=detectBio(r.biotipo_detectado);
+    html = bcard(bd, `Detectamos que es probablemente <strong>${r.biotipo_detectado}</strong>`);
+    html += card('📨','Cómo invitar', r.invitar);
+    html += card('📊','Cómo presentar el plan', r.presentar);
+    html += card('🤝','Cómo cerrar', r.cerrar, 'var(--flem)');
+  } else if(type==='motiva'){
+    const bd=detectBio(r.biotipo_detectado);
+    html = bcard(bd, `Biotipo detectado: <strong>${r.biotipo_detectado}</strong>`);
+    html += card('🔋','Qué lo motiva', r.detonante);
+    html += card('✅','Cómo motivarlo', r.como_motivar, 'var(--flem)');
+    html += card('⛔','Qué evitar', r.que_evitar, '#c0392b');
+    html += card('💬','Frase ideal', '"'+r.frase+'"');
+  } else if(type==='duplica'){
+    const bd=detectBio(r.biotipo_detectado);
+    html = bcard(bd, `Biotipo detectado: <strong>${r.biotipo_detectado}</strong>`);
+    html += card('🧠','Cómo aprende', r.como_aprende);
+    html += card('📚','Cómo enseñarle', r.como_ensenar, 'var(--flem)');
+    html += card('⏳','Ritmo y seguimiento', r.ritmo);
+    html += card('🔑','La clave', r.clave, 'var(--accent2)');
+  } else if(type==='palabras'){
+    const bd=detectBio(r.biotipo_detectado);
+    html = bcard(bd, `La otra persona es probablemente <strong>${r.biotipo_detectado}</strong>`);
+    html += card('✅','Qué decir', r.que_decir, 'var(--flem)');
+    html += card('⛔','Qué evitar', r.que_evitar, '#c0392b');
+    html += card('💬','Frase para empezar', '"'+r.frase+'"', 'var(--accent2)');
+  } else if(type==='compatibilidad'){
+    const bd=detectBio(r.biotipo_detectado);
+    html = bcard(bd, `La otra persona es probablemente <strong>${r.biotipo_detectado}</strong>`);
+    html += card('⚡','Química', r.quimica);
+    html += card('💪','Fortalezas', r.fortalezas, 'var(--flem)');
+    html += card('🔥','Fricciones', r.fricciones, '#c0392b');
+    html += card('🔑','Consejo clave', r.consejo, 'var(--accent2)');
+  } else if(type==='reto'){
+    html = `<div style="text-align:center;margin-bottom:16px;"><div style="font-family:'Cormorant Garamond',serif;font-size:28px;color:var(--accent);">${r.titulo}</div><div style="font-size:12px;color:var(--muted);margin-top:6px;">${r.objetivo}</div></div>`;
+    (r.dias||[]).forEach((d,i)=>{ html += `<div class="dim-card" style="padding:13px 16px;"><div class="dim-text"><strong style="color:var(--accent)">${d.split(':')[0]}:</strong>${d.split(':').slice(1).join(':')}</div></div>`; });
+  }
+
+  if(type!=='reto'){
+    html += `<button class="btn-primary" style="width:100%;margin-top:8px;" onclick="openAITool('${currentAITool}')">Generar otro</button>`;
+  }
+  html += `<button style="width:100%;padding:13px;margin-top:10px;background:transparent;border:1px solid var(--border);border-radius:50px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;" onclick="goTo('s-results')">← Volver a mis herramientas</button>`;
+  body.innerHTML = html;
+  window.scrollTo(0,0);
+}
+
+function detectBio(name){
+  if(!name) return 'sanguineo';
+  const n=name.toLowerCase();
+  if(n.includes('coler')) return 'colerico';
+  if(n.includes('melanc')) return 'melancolico';
+  if(n.includes('flem')) return 'flematico';
+  return 'sanguineo';
+}
+
+
+
+// ══════════════ DASHBOARD DE EQUIPOS ══════════════
+// Equipo real: se carga desde D1 vía /api/team. Cada miembro se une por enlace.
+let team = [];
+window.teamId = null;
+
+// Compatibilidad entre biotipos (0-5)
+const COMPAT = {
+  sanguineo:{sanguineo:4,colerico:3,melancolico:3,flematico:4},
+  colerico:{sanguineo:3,colerico:2,melancolico:4,flematico:4},
+  melancolico:{sanguineo:3,colerico:4,melancolico:3,flematico:5},
+  flematico:{sanguineo:4,colerico:4,melancolico:5,flematico:3}
+};
+
+async function openDashboard(){
+  if(userPlan!=='equipos' && userPlan!=='pro'){ goTo('s-pricing'); return; }
+  const esDemo = currentUser && currentUser.email && currentUser.email.endsWith('@demo.com');
+  goTo('s-dashboard');
+  document.getElementById('dash-wrap').innerHTML='<p style="text-align:center;color:var(--muted);padding:40px;">Cargando tu equipo…</p>';
+  if(esDemo || !currentUser || !currentUser.email){
+    // Demo sin cuenta real: equipo vacío, pide crear cuenta
+    team=[]; window.teamId=null; renderDashboard(); return;
+  }
+  try{
+    const r=await fetch('/api/team?owner='+encodeURIComponent(currentUser.email));
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    window.teamId=d.team_id;
+    team=(d.members||[]).map(m=>({id:m.id,name:m.name,bio:m.bio,status:m.status}));
+  }catch(e){
+    team=[]; window.teamId=null;
+    document.getElementById('dash-wrap').innerHTML='<p style="text-align:center;color:var(--cole);padding:40px;">No se pudo cargar el equipo. Revisa tu conexión.</p>';
+    return;
+  }
+  renderDashboard();
+}
+
+function renderDashboard(){
+  const ready = team.filter(m=>m.status==='ready');
+  const counts={sanguineo:0,colerico:0,melancolico:0,flematico:0};
+  ready.forEach(m=>counts[m.bio]++);
+  const total=ready.length||1;
+
+  let html='';
+
+  // HERO
+  html += `<div class="dash-hero"><h2>Tu equipo</h2><p>${ready.length} miembros diagnosticados · ${team.filter(m=>m.status==='pending').length} pendientes</p></div>`;
+
+  // MAPA
+  html += `<div class="dash-section"><div class="dash-sec-title">🗺️ Mapa de biotipos</div><div class="dash-map">`;
+  ['sanguineo','colerico','melancolico','flematico'].forEach(b=>{
+    html += `<div class="map-cell" style="background:${BT[b].soft};"><div class="map-count" style="color:${BT[b].color};">${counts[b]}</div><div class="map-name" style="color:${BT[b].color};">${BT[b].name}</div></div>`;
+  });
+  html += `</div></div>`;
+
+  // BALANCE
+  html += `<div class="dash-section"><div class="dash-sec-title">⚖️ Balance del equipo</div>`;
+  html += `<div class="balance-bar">`;
+  ['sanguineo','colerico','melancolico','flematico'].forEach(b=>{
+    const pct=(counts[b]/total)*100;
+    if(pct>0) html += `<div class="balance-seg" style="width:${pct}%;background:${BT[b].color};"></div>`;
+  });
+  html += `</div><div class="balance-legend">`;
+  ['sanguineo','colerico','melancolico','flematico'].forEach(b=>{
+    html += `<span><span class="legend-dot" style="background:${BT[b].color};"></span>${BT[b].name} ${Math.round((counts[b]/total)*100)}%</span>`;
+  });
+  html += `</div><div class="dash-insight" style="margin-top:14px;">${balanceInsight(counts,total)}</div></div>`;
+
+  // MIEMBROS
+  html += `<div class="dash-section"><div class="dash-sec-title">👥 Miembros del equipo</div>`;
+  if(team.length===0){
+    html += `<p style="color:var(--muted);font-size:13px;padding:8px 0 14px;">Aún no hay miembros. Comparte el enlace de invitación para que tu equipo haga su diagnóstico y aparezca aquí.</p>`;
+  }
+  team.forEach((m,i)=>{
+    if(m.status==='ready' && m.bio && BT[m.bio]){
+      html += `<div class="member-row">
+        <div class="member-avatar" style="background:${BT[m.bio].color};">${m.name[0]}</div>
+        <div class="member-info"><strong>${m.name}</strong><span style="color:${BT[m.bio].color};">${BT[m.bio].name} · DISC ${BT[m.bio].disc.split(' ')[0]}</span></div>
+        <span class="member-bio-tag" style="background:${BT[m.bio].soft};color:${BT[m.bio].color};">${BT[m.bio].name}</span>
+        <button onclick="removeMember(${m.id})" title="Quitar" style="margin-left:8px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">×</button>
+      </div>`;
+    }else{
+      html += `<div class="member-row">
+        <div class="member-avatar" style="background:var(--surface2);color:var(--muted);">${m.name[0]}</div>
+        <div class="member-info"><strong>${m.name}</strong><span class="member-pending">Esperando diagnóstico...</span></div>
+        <span class="member-bio-tag" style="background:var(--surface2);color:var(--muted);">Pendiente</span>
+        <button onclick="removeMember(${m.id})" title="Quitar" style="margin-left:8px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">×</button>
+      </div>`;
+    }
+  });
+  // invite real
+  const inviteLink = window.teamId ? (location.origin + '/?equipo=' + window.teamId) : '';
+  if(inviteLink){
+    html += `<div style="margin-top:14px;padding:14px;background:var(--surface2);border-radius:12px;">
+      <p style="font-size:12px;color:var(--text);font-weight:600;margin-bottom:8px;">🔗 Enlace de invitación</p>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:10px;">Compártelo. Cada persona hace su diagnóstico y aparece automáticamente en tu equipo.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="invite-btn" onclick="copyInvite()">📋 Copiar enlace</button>
+        <button class="invite-btn" style="background:#25D366;" onclick="shareInviteWA()">💬 WhatsApp</button>
+      </div>
+    </div>`;
+  } else {
+    html += `<p style="font-size:11px;color:var(--muted);margin-top:10px;">Crea tu cuenta real (plan Equipos) para generar tu enlace de invitación.</p>`;
+  }
+  html += `</div>`;
+
+  // COMPATIBILIDAD / FRICCIONES
+  html += `<div class="dash-section"><div class="dash-sec-title">🔗 Dinámica del equipo</div>`;
+  html += `<div class="dash-insight">${dynamicInsight(ready)}</div></div>`;
+
+  // POTENCIAL DE LIDERAZGO
+  const leaders = ready.filter(m=>m.bio==='colerico'||m.bio==='melancolico');
+  html += `<div class="dash-section"><div class="dash-sec-title">⭐ Potencial de liderazgo</div>`;
+  if(leaders.length){
+    html += `<div class="dash-insight"><strong>Candidatos a liderar:</strong> ${leaders.map(m=>m.name).join(', ')}.<br>Los coléricos lideran por resultados y decisión; los melancólicos por estrategia y estructura. Desarróllalos dándoles responsabilidad sobre metas concretas.</div>`;
+  }else{
+    html += `<div class="dash-insight">Tu equipo es fuerte en ejecución y armonía, pero faltan perfiles de liderazgo natural (colérico/melancólico). Considera desarrollar a tus sanguíneos más maduros o sumar un perfil más estratégico.</div>`;
+  }
+  html += `</div>`;
+
+  // export
+  html += `<button class="btn-primary" style="width:100%;margin-top:6px;" onclick="exportTeamPDF()">📄 Exportar reporte PDF</button>`;
+  html += `<button style="width:100%;padding:13px;margin-top:10px;background:transparent;border:1px solid var(--border);border-radius:50px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;" onclick="goTo('s-results')">← Volver</button>`;
+
+  document.getElementById('dash-wrap').innerHTML = html;
+  window.scrollTo(0,0);
+}
+
+function balanceInsight(c,total){
+  const max=Math.max(c.sanguineo,c.colerico,c.melancolico,c.flematico);
+  const domBio=Object.keys(c).find(k=>c[k]===max);
+  const pct=Math.round((max/total)*100);
+  if(pct>=50){
+    return `Tu equipo está <strong>desequilibrado</strong>: el ${pct}% son <strong style="color:${BT[domBio].color}">${BT[domBio].name}</strong>. ${domBio==='colerico'?'Demasiados coléricos chocan por el control — pueden competir en vez de colaborar.':domBio==='sanguineo'?'Mucha energía y entusiasmo, pero puede faltar quien aterrice y dé seguimiento.':domBio==='melancolico'?'Mucho análisis y perfeccionismo — el equipo puede paralizarse antes de actuar.':'Mucha estabilidad y armonía, pero puede faltar quien empuje el cambio.'} Equilibra sumando otros perfiles.`;
+  }
+  return `Tu equipo está <strong>bien balanceado</strong>. Tienes diversidad de temperamentos, lo que da fortaleza: energía, ejecución, análisis y estabilidad conviven. Aprovéchalo asignando roles según el biotipo de cada quien.`;
+}
+
+function dynamicInsight(ready){
+  // find best and worst pairs by biotype combos present
+  const bios=[...new Set(ready.map(m=>m.bio))];
+  let best={s:-1}, worst={s:9};
+  for(let i=0;i<bios.length;i++) for(let j=i;j<bios.length;j++){
+    const s=COMPAT[bios[i]][bios[j]];
+    if(s>best.s) best={a:bios[i],b:bios[j],s};
+    if(s<worst.s) worst={a:bios[i],b:bios[j],s};
+  }
+  let txt='';
+  if(best.a) txt+=`<strong>Mejor sinergia:</strong> ${BT[best.a].name} + ${BT[best.b].name} (${best.s}/5). Trabajan muy bien juntos.<br><br>`;
+  if(worst.a && worst.s<3) txt+=`<strong>Posible fricción:</strong> ${BT[worst.a].name} + ${BT[worst.b].name} (${worst.s}/5). Vigila esta combinación — pueden chocar. Medía con reglas claras de comunicación.`;
+  else txt+=`No hay combinaciones de alta fricción en tu equipo actual. Buena señal.`;
+  return txt;
+}
+
+function copyInvite(){
+  if(!window.teamId) return;
+  const link=location.origin+'/?equipo='+window.teamId;
+  navigator.clipboard.writeText(link).then(()=>alert('¡Enlace copiado!\n\n'+link)).catch(()=>prompt('Copia el enlace:',link));
+}
+function shareInviteWA(){
+  if(!window.teamId) return;
+  const link=location.origin+'/?equipo='+window.teamId;
+  const txt=encodeURIComponent('Te invito a descubrir tu biotipo y unirte a mi equipo en BioTipo 🧬\n'+link);
+  window.open('https://wa.me/?text='+txt,'_blank');
+}
+async function removeMember(id){
+  if(!window.teamId || !currentUser) return;
+  if(!confirm('¿Quitar a este miembro del equipo?')) return;
+  try{
+    const r=await fetch('/api/team',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'remove',team_id:window.teamId,member_id:id,owner:currentUser.email})});
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    team=team.filter(m=>m.id!==id);
+    renderDashboard();
+  }catch(e){ alert('No se pudo quitar: '+e.message); }
+}
+
+function loadJsPDF(){
+  return new Promise((res,rej)=>{
+    if(window.jspdf){ res(); return; }
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.onload=()=>res(); s.onerror=()=>rej(new Error('No se pudo cargar jsPDF'));
+    document.head.appendChild(s);
+  });
+}
+
+async function exportTeamPDF(){
+  const ready=team.filter(m=>m.status==='ready'&&m.bio&&BT[m.bio]);
+  if(ready.length===0){ alert('Aún no hay miembros diagnosticados para el reporte.'); return; }
+  try{
+    await loadJsPDF();
+    const { jsPDF }=window.jspdf;
+    const doc=new jsPDF({unit:'mm',format:'a4'});
+    const W=210; let y=20;
+    const counts={sanguineo:0,colerico:0,melancolico:0,flematico:0};
+    ready.forEach(m=>counts[m.bio]++); const total=ready.length;
+    const HEX={sanguineo:[232,99,74],colerico:[212,133,58],melancolico:[122,143,196],flematico:[106,171,142]};
+
+    doc.setFillColor(29,78,216); doc.rect(0,0,W,28,'F');
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(18);
+    doc.text('Reporte de Equipo · BioTipo',14,15);
+    doc.setFontSize(10); doc.setFont('helvetica','normal');
+    doc.text('Análisis de temperamentos hipocráticos',14,22);
+    y=40; doc.setTextColor(40);
+    doc.setFontSize(11);
+    doc.text(`Miembros diagnosticados: ${total}`,14,y); y+=7;
+    doc.text(new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'}),14,y); y+=10;
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text('Distribución de biotipos',14,y); y+=8;
+    doc.setFont('helvetica','normal'); doc.setFontSize(11);
+    ['sanguineo','colerico','melancolico','flematico'].forEach(b=>{
+      const pct=Math.round((counts[b]/total)*100);
+      doc.setFillColor(...HEX[b]); doc.rect(14,y-3.5,4,4,'F');
+      doc.setTextColor(40);
+      doc.text(`${BT[b].name} (DISC ${BT[b].disc.split(' ')[0]}): ${counts[b]}  ·  ${pct}%`,21,y);
+      const barW=(pct/100)*120;
+      doc.setFillColor(235); doc.rect(120,y-3.5,60,4,'F');
+      doc.setFillColor(...HEX[b]); doc.rect(120,y-3.5,(pct/100)*60,4,'F');
+      y+=8;
+    });
+    y+=4;
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text('Miembros',14,y); y+=8;
+    doc.setFontSize(11);
+    ready.forEach(m=>{
+      if(y>275){ doc.addPage(); y=20; }
+      doc.setFillColor(...HEX[m.bio]); doc.circle(16,y-1.5,2.2,'F');
+      doc.setTextColor(40); doc.setFont('helvetica','bold'); doc.text(m.name,21,y);
+      doc.setFont('helvetica','normal'); doc.setTextColor(110);
+      doc.text(`${BT[m.bio].name} · DISC ${BT[m.bio].disc.split(' ')[0]}`,120,y);
+      y+=7;
+    });
+
+    doc.setFontSize(8); doc.setTextColor(150);
+    doc.text('Generado por biotipos.app',14,290);
+    doc.save('Reporte-Equipo-BioTipo.pdf');
+  }catch(e){ alert('No se pudo generar el PDF: '+e.message); }
+}
+
+
+function resetAll() {
+  capturedImageBase64=null; handAnalysisResult=null;
+  currentQ=0; answers=[];
+  scores={sanguineo:0,colerico:0,melancolico:0,flematico:0};
+  document.getElementById('video-el').style.display='none';
+  document.getElementById('hand-canvas').style.display='none';
+  document.getElementById('img-preview-wrap').style.display='none';
+  document.getElementById('cam-placeholder').style.display='flex';
+  document.getElementById('cam-overlay').style.display='none';
+  document.getElementById('btn-start-cam').style.display='flex';
+  document.getElementById('btn-capture').style.display='none';
+  document.getElementById('btn-retake').style.display='none';
+  document.getElementById('btn-cam-next').disabled=true;
+  document.getElementById('analyzing-overlay').classList.remove('active');
+  showError('');
+  goTo('s-intro');
+}
+
+// Coach input: Enter envía, Shift+Enter salto de línea
+document.addEventListener('DOMContentLoaded',()=>{
+  seedTestAccounts();
+  restoreSession();
+  renderAccountBar();   // muestra botón "Iniciar sesión" si es invitado
+  // Detectar regreso de pago exitoso de Stripe
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('pago') === 'ok') {
+    const plan = params.get('plan') || 'pro';
+    userPlan = (plan==='equipos') ? 'equipos' : (plan==='personal' ? 'personal' : 'pro');
+    persistUser(); renderAccountBar(); renderToolsHub();
+    alert('✅ ¡Pago confirmado! Tu plan ya está activo.');
+    window.history.replaceState({}, '', '/');
+    goTo('s-results');
+  }
+  renderProfileFeats();
+  // Detectar invitación a equipo (?equipo=TOKEN): el invitado hará su diagnóstico y se unirá al final
+  const equipoTok = params.get('equipo');
+  if(equipoTok){
+    window.joinTeamToken = equipoTok;
+    window.history.replaceState({}, '', '/');
+  }
+  const pf=document.getElementById('feats-personal'); if(pf) pf.classList.add('open');
+  const ci = document.getElementById('coach-input');
+  if(ci){ ci.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendCoach(); } }); }
+});
+</script>
+
+
+<!-- ═══ COACH DE BOLSILLO ═══ -->
+<div class="screen" id="s-coach">
+  <div class="tool-header">
+    <div class="tool-back" onclick="goTo('s-results')">←</div>
+    <div class="tool-h-txt"><strong id="coach-title">Tu coach 24/7</strong><span id="coach-sub">Cuéntame tu situación</span></div>
+    <div class="quota-pill" id="coach-quota">20 consultas</div>
+  </div>
+  <div class="chat-box" id="coach-chat"></div>
+  <div class="chat-suggestions" id="coach-sugg"></div>
+  <div class="chat-input-row">
+    <textarea class="chat-input" id="coach-input" rows="1" placeholder="Escribe tu situación..."></textarea>
+    <button class="chat-send" id="coach-send" onclick="sendCoach()">↑</button>
+  </div>
+</div>
+
+<!-- ═══ ANALIZA A OTRA PERSONA ═══ -->
+<div class="screen" id="s-analyze">
+  <div class="tool-header">
+    <div class="tool-back" onclick="goTo('s-results')">←</div>
+    <div class="tool-h-txt"><strong id="analyze-title">Analiza a otra persona</strong><span>Descubre su biotipo y cómo tratarla</span></div>
+    <div class="quota-pill" id="analyze-quota">5 análisis</div>
+  </div>
+  <div class="analyze-form" id="analyze-form"></div>
+</div>
+
+<!-- ═══ RESULTADO COMPLETO (8 DIMENSIONES) ═══ -->
+<div class="screen" id="s-fulltool">
+  <div class="tool-header">
+    <div class="tool-back" onclick="goTo('s-results')">←</div>
+    <div class="tool-h-txt"><strong>Conócete de verdad</strong><span id="fulltool-sub">Tu perfil completo en 8 dimensiones</span></div>
+  </div>
+  <div id="fulltool-body" style="width:100%;max-width:560px;"></div>
+</div>
+
+
+<!-- ═══ HERRAMIENTA IA GENÉRICA ═══ -->
+<div class="screen" id="s-aitool">
+  <div class="tool-header" style="max-width:560px;">
+    <div class="tool-back" onclick="goTo('s-results')">←</div>
+    <div class="tool-h-txt"><strong id="ait-title">Herramienta</strong><span id="ait-sub"></span></div>
+    <div class="quota-pill" id="ait-quota" style="display:none;"></div>
+  </div>
+  <div id="ait-body" style="width:100%;max-width:560px;"></div>
+</div>
+
+
+<!-- ═══ DASHBOARD EQUIPOS ═══ -->
+<div class="screen" id="s-dashboard">
+  <div class="tool-header" style="max-width:680px;">
+    <div class="tool-back" onclick="goTo('s-results')">←</div>
+    <div class="tool-h-txt"><strong>Dashboard de equipo</strong><span>Análisis de biotipos de tu equipo</span></div>
+  </div>
+  <div class="dash-wrap" id="dash-wrap"></div>
+</div>
+
+<!-- ═══ PRICING ═══ -->
+<div class="screen" id="s-pricing">
+  <div style="width:100%;max-width:640px;margin:auto;display:flex;flex-direction:column;align-items:center;gap:14px;">
+
+    <div class="pricing-header">
+      <div class="pricing-eyebrow">Planes BioTipo</div>
+      <h2 class="pricing-title">Elige tu nivel de<br><em>autoconocimiento</em></h2>
+      <p class="pricing-sub">Sin permanencia. Cancela cuando quieras.</p>
+    </div>
+
+    <div class="plans-grid plans-4">
+
+      <div class="plan-card">
+        <div class="plan-name">Gratis</div>
+        <div class="plan-price">$0<span> MXN</span></div>
+        <div class="plan-period">para siempre</div>
+        <div class="plan-divider"></div>
+        <div class="plan-features">
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Diagnóstico con foto</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Biotipo principal</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>3 fortalezas básicas</div>
+          <div class="plan-feat"><span class="plan-feat-icon" style="color:var(--muted)">—</span>Coach de bolsillo</div>
+          <div class="plan-feat"><span class="plan-feat-icon" style="color:var(--muted)">—</span>Analiza a otra persona</div>
+        </div>
+        <button class="btn-plan btn-plan-free" onclick="goTo('s-results')">Seguir gratis</button>
+      </div>
+
+      <div class="plan-card featured">
+        <div class="plan-name">Personal</div>
+        <div class="plan-price">$79<span> MXN</span></div>
+        <div class="plan-period" style="color:var(--accent)">individual</div>
+        <div class="plan-divider"></div>
+        <div class="plan-features">
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Todo lo gratuito</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Perfil completo 8 dimensiones</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Coach de bolsillo (20/mes)</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Analiza a otra persona (5/mes)</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Compatibilidad 4 biotipos</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Reto mensual</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Reporte PDF descargable</div>
+        </div>
+        <button class="btn-plan btn-plan-main" onclick="selectPlan('personal')">Empezar ahora</button>
+      </div>
+
+      <div class="plan-card">
+        <div class="plan-name">Profesional</div>
+        <div class="plan-price">$199<span> MXN</span></div>
+        <div class="plan-period">hasta 5 personas</div>
+        <div class="plan-divider"></div>
+        <div class="plan-features">
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Todo Personal</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Coach de bolsillo ilimitado</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Analiza personas ilimitado</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Analiza hasta 5 personas</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Scripts de venta por biotipo</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Ideal asesores y líderes</div>
+        </div>
+        <button class="btn-plan btn-plan-pro" onclick="selectPlan('pro')">Comenzar Profesional</button>
+      </div>
+
+      <div class="plan-card">
+        <div class="plan-name">Equipos</div>
+        <div class="plan-price">$499<span> MXN</span></div>
+        <div class="plan-period">hasta 15 personas</div>
+        <div class="plan-divider"></div>
+        <div class="plan-features">
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Todo Profesional</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Dashboard de equipo (15)</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Mapa visual de biotipos</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Matriz de compatibilidad</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Reporte de dinámica grupal</div>
+          <div class="plan-feat hl"><span class="plan-feat-icon">✓</span>Soporte prioritario</div>
+        </div>
+        <button class="btn-plan btn-plan-pro" onclick="selectPlan('equipos')">Comenzar Equipos</button>
+      </div>
+    </div>
+
+    <div class="feat-table">
+      <div class="ft-header ft-4"><span>Funcionalidad</span><span>Gratis</span><span style="color:var(--accent)">Personal</span><span>Profesional</span><span>Equipos</span></div>
+      <div class="ft-row ft-4 ft-section"><span class="ft-feat">AUTOCONOCIMIENTO</span><span></span><span></span><span></span><span></span></div>
+      <div class="ft-row ft-4"><span class="ft-feat">Diagnóstico con foto de mano</span><span class="ft-check">✓</span><span class="ft-check" style="color:var(--accent)">✓</span><span class="ft-check">✓</span><span class="ft-check">✓</span></div>
+      <div class="ft-row ft-4"><span class="ft-feat">Perfil completo 8 dimensiones</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check" style="color:var(--accent)">✓</span><span class="ft-check">✓</span><span class="ft-check">✓</span></div>
+      <div class="ft-row ft-4"><span class="ft-feat">Reporte PDF descargable</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check" style="color:var(--accent)">✓</span><span class="ft-check">✓</span><span class="ft-check">✓</span></div>
+      <div class="ft-row ft-4 ft-section"><span class="ft-feat">COMUNICACIÓN E IA</span><span></span><span></span><span></span><span></span></div>
+      <div class="ft-row ft-4"><span class="ft-feat">Coach de bolsillo</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check" style="color:var(--accent)">20/mes</span><span class="ft-check">Ilim.</span><span class="ft-check">Ilim.</span></div>
+      <div class="ft-row ft-4"><span class="ft-feat">Analiza a otra persona</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check" style="color:var(--accent)">5/mes</span><span class="ft-check">Ilim.</span><span class="ft-check">Ilim.</span></div>
+      <div class="ft-row ft-4"><span class="ft-feat">Compatibilidad entre biotipos</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check" style="color:var(--accent)">✓</span><span class="ft-check">✓</span><span class="ft-check">✓</span></div>
+      <div class="ft-row ft-4"><span class="ft-feat">Scripts de venta por biotipo</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check">✓</span><span class="ft-check">✓</span></div>
+      <div class="ft-row ft-4 ft-section"><span class="ft-feat">EQUIPO Y NEGOCIO</span><span></span><span></span><span></span><span></span></div>
+      <div class="ft-row ft-4"><span class="ft-feat">Análisis de personas</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check" style="color:var(--accent)">1</span><span class="ft-check">5</span><span class="ft-check">15</span></div>
+      <div class="ft-row ft-4"><span class="ft-feat">Dashboard de equipo</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check">✓</span></div>
+      <div class="ft-row ft-4"><span class="ft-feat">Reporte de dinámica grupal</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check" style="color:var(--muted)">—</span><span class="ft-check">✓</span></div>
+    </div>
+
+    <div class="guarantee">
+      <div class="guarantee-icon">🔓</div>
+      <div class="guarantee-text">
+        <strong>Sin permanencia</strong>
+        No hay contratos ni plazos forzosos. Cancela tu suscripción cuando quieras, en un solo clic.
+      </div>
+    </div>
+
+    <button style="padding:14px 24px;background:transparent;border:1px solid var(--border);border-radius:50px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;margin-top:4px;" onclick="goTo('s-results')">← Ver mi resultado</button>
+  </div>
+</div>
+
+</body>
+</html>
